@@ -178,7 +178,7 @@ class Storage:
         # Migration daily_rollup : ancien schema PK = (date, project_id, source).
         # Si on detecte ca et qu'on n'a pas encore migre, on recree la table
         # avec PK = (date, project_id, source, machine_id). Les rollups sont
-        # toujours regenerables via `tracker rollup` donc on peut dropper sans
+        # toujours regenerables via `ship1000x rollup` donc on peut dropper sans
         # perte — c'est plus propre qu'un hack qui laisse la vieille PK en place.
         need_rollup_migration = not has_column("daily_rollup", "machine_id")
         if need_rollup_migration:
@@ -213,7 +213,7 @@ class Storage:
                 )
             """)
             # On NE copie PAS les anciennes data : il faut les regenerer via
-            # `tracker rollup` pour qu'elles portent machine_id + unique_hashes.
+            # `ship1000x rollup` pour qu'elles portent machine_id + unique_hashes.
             # L'ancienne table reste disponible en backup si besoin.
 
     def upsert_event(self, event: dict[str, Any], replace: bool = False) -> None:
