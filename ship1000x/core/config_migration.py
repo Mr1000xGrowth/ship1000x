@@ -21,7 +21,6 @@ from typing import Any
 
 import yaml
 
-
 # Endpoint S3 par defaut : aucun. L'utilisateur doit configurer son propre
 # bucket dans config/privacy.yaml (cloud.endpoint, cloud.bucket). Exemples :
 #   - Backblaze B2 : https://s3.us-west-004.backblazeb2.com

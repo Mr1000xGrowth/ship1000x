@@ -12,10 +12,10 @@ from __future__ import annotations
 import hashlib
 import json
 import subprocess
+from collections.abc import Iterator
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Iterator
-
+from typing import Any
 
 # Scan racine : TOUT le HOME par defaut (generique pour tous les users).
 # Avant : hardcode sur ~/Desktop + ~/ClaudeCode - Test OpenClaw GHL,
@@ -258,12 +258,14 @@ def _stable_event_id(repo_path: str, commit_hash: str) -> str:
 
 
 def collect(storage, classifier, privacy_config: dict[str, Any]) -> dict[str, int]:
-    from ship1000x.core.privacy import sanitize_event, anonymize_path, is_excluded_path
     from ship1000x.core.line_classifier import (
         classify_commit_lines,
-        load_config as load_line_config,
         parse_gitattributes,
     )
+    from ship1000x.core.line_classifier import (
+        load_config as load_line_config,
+    )
+    from ship1000x.core.privacy import anonymize_path, is_excluded_path, sanitize_event
 
     stats = {"files_seen": 0, "sessions_ingested": 0, "events_ingested": 0, "skipped": 0}
     exclude_paths = privacy_config.get("exclude_paths", []) or []

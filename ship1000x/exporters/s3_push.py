@@ -113,6 +113,7 @@ def push_to_s3(
 
     try:
         import os
+
         import boto3
         from botocore.config import Config
         from botocore.exceptions import ClientError

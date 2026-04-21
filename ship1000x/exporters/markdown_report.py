@@ -7,7 +7,6 @@ metriques par projet, vitesse, cout, output, signaux.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
 
 
 def _fmt_hours(sec: int | None) -> str:
@@ -185,7 +184,9 @@ def generate_report(storage, cutoff: datetime, since_label: str = "") -> str:
 
     # Insights (efficience + multiplicateur + signaux)
     try:
-        from datetime import datetime as _dt, timezone as _tz
+        from datetime import datetime as _dt
+        from datetime import timezone as _tz
+
         from ship1000x.insights.engine import Window, compute_overview
         from ship1000x.insights.multiplier import compute_multiplier
         from ship1000x.insights.signals import compute_all_signals

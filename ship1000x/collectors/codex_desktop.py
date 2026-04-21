@@ -166,7 +166,7 @@ def collect(storage, classifier, privacy_config: dict[str, Any]) -> dict[str, in
 
     Idempotent : ingestion_state offset = max(ts) deja ingere.
     """
-    from ship1000x.core.privacy import sanitize_event, is_excluded_path
+    from ship1000x.core.privacy import is_excluded_path, sanitize_event
 
     stats = {"files_seen": 0, "sessions_ingested": 0, "events_ingested": 0, "skipped": 0}
     if not CODEX_STATE_DB.exists():

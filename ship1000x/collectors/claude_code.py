@@ -15,11 +15,11 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Iterator
-
+from typing import Any
 
 CLAUDE_CODE_DIR = Path.home() / ".claude" / "projects"
 ACTIVE_PAUSE_THRESHOLD_SEC = 5 * 60  # 5 min entre 2 user events = pause
@@ -369,8 +369,7 @@ def iter_session_files(projects_dir: Path = CLAUDE_CODE_DIR) -> Iterator[Path]:
     """Yield tous les fichiers JSONL sous ~/.claude/projects/."""
     if not projects_dir.exists():
         return
-    for jsonl in projects_dir.glob("*/*.jsonl"):
-        yield jsonl
+    yield from projects_dir.glob("*/*.jsonl")
 
 
 def collect(storage, classifier, privacy_config: dict[str, Any]) -> dict[str, int]:

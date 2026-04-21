@@ -14,13 +14,10 @@ import getpass
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
 
-import click
 import yaml
 from rich.console import Console
 from rich.prompt import Confirm, Prompt
-
 
 CONSENT_TEXT = """
 ═══════════════════════════════════════════════════════════════════════════

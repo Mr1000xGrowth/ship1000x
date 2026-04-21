@@ -21,10 +21,10 @@ from __future__ import annotations
 import hashlib
 import json
 import zipfile
+from collections.abc import Iterator
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterator
-
+from typing import Any
 
 REPO_ROOT = Path(__file__).parent.parent
 DEFAULT_DROP_DIR = REPO_ROOT / "drop"
@@ -201,7 +201,7 @@ def ingest_path(
     privacy_config: dict[str, Any],
 ) -> dict[str, int]:
     """Ingestion d'un fichier ou dossier specifique."""
-    from ship1000x.core.privacy import sanitize_event, is_excluded_path
+    from ship1000x.core.privacy import sanitize_event
 
     stats = {"files_seen": 0, "events_ingested": 0, "skipped": 0}
     exclude = privacy_config.get("exclude_keywords") or []

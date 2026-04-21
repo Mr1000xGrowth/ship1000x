@@ -11,7 +11,6 @@ from typing import Any
 
 import yaml
 
-
 DEFAULTS: dict[str, Any] = {
     # TJM senior dev (EUR/jour)
     "tjm_senior_low": 600,

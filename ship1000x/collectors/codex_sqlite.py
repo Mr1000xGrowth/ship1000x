@@ -15,10 +15,8 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
-
 
 CODEX_STATE_DB = Path.home() / ".codex" / "state_5.sqlite"
 
@@ -59,7 +57,6 @@ def enrich_codex_events(storage, classifier, privacy_config: dict[str, Any]) -> 
     du thread correspondant. Met aussi a jour tokens si la DB a une
     valeur plus fiable que l'agregation JSONL.
     """
-    from ship1000x.core.privacy import anonymize_path
 
     stats = {"threads_seen": 0, "events_enriched": 0, "reclassified": 0}
 

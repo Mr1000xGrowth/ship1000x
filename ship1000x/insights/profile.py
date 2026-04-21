@@ -9,7 +9,6 @@ Caracteristiques du style de travail :
 
 from __future__ import annotations
 
-import json
 from typing import Any
 
 from ship1000x.insights.engine import (
@@ -28,7 +27,7 @@ def compute_profile(storage, window: Window) -> dict[str, Any]:
     # started_at et ended_at sur les heures qu'il chevauche. Evite le biais
     # "tout attribue a l'heure de started_at" qui concentrait les session_day
     # JSONL (started_at = 00h UTC du premier message du jour).
-    from datetime import datetime, timedelta, timezone as _tz
+    from datetime import datetime, timedelta
     heatmap = {dow: {h: 0 for h in range(24)} for dow in range(7)}
     heatmap_autonomous = {dow: {h: 0 for h in range(24)} for dow in range(7)}
 

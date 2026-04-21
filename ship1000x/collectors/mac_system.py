@@ -21,7 +21,6 @@ from __future__ import annotations
 import re
 import subprocess
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from typing import Any
 
 
@@ -95,8 +94,9 @@ def parse_pmset_log(output: str, since: datetime) -> list[dict[str, Any]]:
 
 def collect_pmset(storage, since_days: int = 30) -> dict[str, int]:
     """Collecte les wake/sleep events des N derniers jours."""
-    from ship1000x.core.privacy import sanitize_event
     import hashlib
+
+    from ship1000x.core.privacy import sanitize_event
 
     stats = {"wake_events": 0, "sleep_events": 0}
     try:

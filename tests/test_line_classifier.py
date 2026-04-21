@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
 from ship1000x.core.line_classifier import (
@@ -16,7 +14,6 @@ from ship1000x.core.line_classifier import (
     load_config,
     parse_gitattributes,
 )
-
 
 # ---- Fixtures ----
 

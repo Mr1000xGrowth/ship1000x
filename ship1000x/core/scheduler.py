@@ -7,10 +7,8 @@ chaine ingest + rollup + push.
 
 from __future__ import annotations
 
-import os
 import subprocess
 from pathlib import Path
-
 
 LABEL = "com.mr1000xgrowth.ship1000x"
 LAUNCH_AGENTS = Path.home() / "Library" / "LaunchAgents"

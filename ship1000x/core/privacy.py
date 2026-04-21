@@ -10,11 +10,9 @@ Cette fonction est le gardien. Tout event qui n'a pas ete passe par
 from __future__ import annotations
 
 import hashlib
-import os
 import re
 from pathlib import Path
 from typing import Any
-
 
 HOME = str(Path.home())
 

@@ -37,7 +37,7 @@ class LineClassificationConfig:
     seed_always_first_commit: bool = True
     _compiled_message_regex: re.Pattern[str] | None = None
 
-    def compile(self) -> "LineClassificationConfig":
+    def compile(self) -> LineClassificationConfig:
         self._compiled_message_regex = re.compile(self.seed_message_regex, re.IGNORECASE)
         return self
 
@@ -230,13 +230,7 @@ def is_seed_commit(
     """
     if config.seed_always_first_commit and is_first_commit:
         return True
-    if (
-        total_lines_added >= config.seed_lines_threshold
-        and files_count >= config.seed_files_threshold
-        and config.message_matches_seed(commit_message)
-    ):
-        return True
-    return False
+    return bool(total_lines_added >= config.seed_lines_threshold and files_count >= config.seed_files_threshold and config.message_matches_seed(commit_message))
 
 
 def classify_commit_lines(

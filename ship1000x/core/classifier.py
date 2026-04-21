@@ -156,7 +156,7 @@ def _first_commit_hash(root_str: str) -> str:
             text=True,
             timeout=3,
         )
-        lines = [l.strip() for l in result.stdout.splitlines() if l.strip()]
+        lines = [line.strip() for line in result.stdout.splitlines() if line.strip()]
         return lines[0][:12] if lines else ""
     except (subprocess.TimeoutExpired, OSError, FileNotFoundError):
         return ""
@@ -250,7 +250,7 @@ class Classifier:
         self.rules = project_rules
 
     @classmethod
-    def from_yaml_config(cls, config: dict[str, Any]) -> "Classifier":
+    def from_yaml_config(cls, config: dict[str, Any]) -> Classifier:
         rules = []
         for proj in config.get("projects", []):
             rules.append(ProjectRule(

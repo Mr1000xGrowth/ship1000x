@@ -15,7 +15,6 @@ Mise a jour 2026-04-21.
 
 from __future__ import annotations
 
-
 # Anthropic / Claude
 # Tarifs par million de tokens (USD)
 ANTHROPIC_PRICING = {

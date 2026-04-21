@@ -17,10 +17,9 @@ le statut de chaque source potentielle (tracee ou pas).
 
 from __future__ import annotations
 
-import json
 import os
 import sqlite3
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any

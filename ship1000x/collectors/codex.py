@@ -12,10 +12,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Iterator
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Iterator
-
+from typing import Any
 
 CODEX_SESSIONS_DIR = Path.home() / ".codex" / "sessions"
 ACTIVE_PAUSE_THRESHOLD_SEC = 5 * 60
@@ -254,8 +254,7 @@ def parse_session_file(path: Path) -> dict[str, Any]:
 def iter_rollout_files(base_dir: Path = CODEX_SESSIONS_DIR) -> Iterator[Path]:
     if not base_dir.exists():
         return
-    for p in base_dir.glob("**/rollout-*.jsonl"):
-        yield p
+    yield from base_dir.glob("**/rollout-*.jsonl")
 
 
 def _stable_event_id(file_key: str, ts: str) -> str:
@@ -264,7 +263,7 @@ def _stable_event_id(file_key: str, ts: str) -> str:
 
 
 def collect(storage, classifier, privacy_config: dict[str, Any]) -> dict[str, int]:
-    from ship1000x.core.privacy import sanitize_event, is_excluded_path
+    from ship1000x.core.privacy import is_excluded_path, sanitize_event
 
     stats = {"files_seen": 0, "sessions_ingested": 0, "events_ingested": 0, "skipped": 0}
     exclude_paths = privacy_config.get("exclude_paths", []) or []

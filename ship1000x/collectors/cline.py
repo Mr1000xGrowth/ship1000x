@@ -24,7 +24,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -120,10 +119,7 @@ def _parse_task(task_dir: Path) -> dict[str, Any] | None:
             ui = json.loads(ui_file.read_text(encoding="utf-8"))
             for msg in ui:
                 # Cline UI messages : "type": "say" ou "ask", avec "ts"
-                if msg.get("type") in ("say", "ask") and msg.get("say") == "user_feedback":
-                    if ts := msg.get("ts"):
-                        user_message_timestamps.append(ts)
-                elif msg.get("type") == "ask":
+                if msg.get("type") in ("say", "ask") and msg.get("say") == "user_feedback" or msg.get("type") == "ask":
                     if ts := msg.get("ts"):
                         user_message_timestamps.append(ts)
         except (OSError, json.JSONDecodeError):
@@ -174,7 +170,7 @@ def _parse_task(task_dir: Path) -> dict[str, Any] | None:
 
 def collect(storage, classifier, privacy_config: dict[str, Any]) -> dict[str, int]:
     """Ingestion Cline. Idempotent via ingestion_state sur task_id."""
-    from ship1000x.core.privacy import sanitize_event, is_excluded_path
+    from ship1000x.core.privacy import is_excluded_path, sanitize_event
 
     stats = {"files_seen": 0, "sessions_ingested": 0, "events_ingested": 0, "skipped": 0}
     if not CLINE_TASKS_DIR.exists():

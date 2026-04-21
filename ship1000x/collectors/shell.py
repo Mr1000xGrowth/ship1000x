@@ -16,11 +16,10 @@ from __future__ import annotations
 
 import hashlib
 import re
-import subprocess
+from collections.abc import Iterator
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterator
-
+from typing import Any
 
 ZSH_HISTORY = Path.home() / ".zsh_history"
 BASH_HISTORY = Path.home() / ".bash_history"

@@ -19,7 +19,6 @@ from typing import Any
 from ship1000x.insights.benchmarks import load_benchmarks
 from ship1000x.insights.engine import (
     Window,
-    get_active_sec_by_day,
     get_consecutive_active_days,
     get_night_active_pct,
     get_sessions_long,
@@ -130,7 +129,7 @@ def detect_project_drift(storage, window: Window) -> list[dict[str, Any]]:
 def detect_blocages(storage, window: Window) -> list[dict[str, Any]]:
     """Detecte les blocages : beaucoup de prompts, peu de commits."""
     import json
-    b = load_benchmarks()
+    load_benchmarks()  # Warm cache; thresholds inlined below.
     signals: list[dict[str, Any]] = []
 
     # Pour chaque jour actif avec Claude Code, count typed et commits.

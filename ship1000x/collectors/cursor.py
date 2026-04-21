@@ -18,7 +18,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-
 CURSOR_DB = Path.home() / ".cursor" / "ai-tracking" / "ai-code-tracking.db"
 # Marker pour dire "cet event est un proxy, pas une mesure de temps"
 AI_BLOCK_MARKER_SEC = 60
@@ -38,7 +37,7 @@ def collect(storage, classifier, privacy_config: dict[str, Any]) -> dict[str, in
       3. Agreger par (day, project_id) → 1 event synthetique
       4. Lire scored_commits pour enrichir lines_added/deleted (future)
     """
-    from ship1000x.core.privacy import sanitize_event, anonymize_path, is_excluded_path
+    from ship1000x.core.privacy import is_excluded_path, sanitize_event
 
     stats = {"files_seen": 0, "sessions_ingested": 0, "events_ingested": 0, "skipped": 0}
     exclude_paths = privacy_config.get("exclude_paths", []) or []

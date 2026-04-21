@@ -233,7 +233,7 @@ def collect(
     Idempotent via mtime : ne re-traite que les fichiers modifies depuis
     le dernier passage.
     """
-    from ship1000x.core.privacy import sanitize_event, is_excluded_path
+    from ship1000x.core.privacy import is_excluded_path, sanitize_event
 
     stats = {
         "files_seen": 0,

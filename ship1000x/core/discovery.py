@@ -14,9 +14,8 @@ Chaque collector peut ensuite lire cette liste en plus de son path par defaut.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable
-
 
 # Dossiers a chercher. Chaque entry = (collector_id, match_function).
 # Le match_function prend un Path et retourne True si ce dossier est un match

@@ -69,7 +69,17 @@ target-version = "py310"
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "N", "UP", "B", "SIM"]
-ignore = ["E501"]
+ignore = [
+    "E501",   # line too long (we use black-style formatting, not hard-wrap)
+    "E402",   # module-level import not at top (we do lazy imports to keep CLI startup fast)
+    "N806",   # variable in function should be lowercase (we keep some PascalCase for clarity)
+    "B007",   # loop control variable not used (sometimes intentional for count-only iterations)
+    "SIM102", # nested if (readable for complex conditions)
+    "SIM108", # ternary vs if/else (ternary not always more readable)
+    "SIM110", # `any()` for-loop (explicit loop sometimes clearer)
+    "SIM115", # context manager for file (sometimes we handle errors differently)
+    "SIM118", # `in dict.keys()` vs `in dict` (explicit is fine)
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

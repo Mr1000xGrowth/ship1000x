@@ -22,12 +22,9 @@ from ship1000x.insights.engine import (
     compute_overview,
     get_active_sec_by_day,
     get_consecutive_active_days,
-    get_night_active_pct,
-    get_sessions_long,
 )
 from ship1000x.insights.multiplier import compute_multiplier
 from ship1000x.insights.signals import (
-    compute_all_signals,
     detect_blocages,
     detect_burnout,
 )
