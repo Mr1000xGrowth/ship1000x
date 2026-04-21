@@ -1,0 +1,79 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ship1000x"
+version = "0.1.0"
+description = "Track what you actually ship with AI. Local-first tracker for AI-assisted development (Claude Code, Codex, Cursor, git)."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+authors = [
+    { name = "Mr1000xGrowth" }
+]
+keywords = [
+    "ai",
+    "productivity",
+    "tracker",
+    "claude-code",
+    "codex",
+    "cursor",
+    "developer-tools",
+    "time-tracking",
+    "llm-cost",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development",
+    "Topic :: Utilities",
+]
+dependencies = [
+    "click>=8.1",
+    "rich>=13.7",
+    "pyyaml>=6.0",
+    "boto3>=1.34",
+    "flask>=3.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.5",
+]
+
+[project.urls]
+Homepage = "https://github.com/Mr1000xGrowth/ship1000x"
+Repository = "https://github.com/Mr1000xGrowth/ship1000x"
+Issues = "https://github.com/Mr1000xGrowth/ship1000x/issues"
+
+[project.scripts]
+ship1000x = "ship1000x.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["ship1000x*"]
+
+[tool.setuptools.package-data]
+ship1000x = ["dashboard/templates/*.html", "dashboard/static/*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "SIM"]
+ignore = ["E501"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
