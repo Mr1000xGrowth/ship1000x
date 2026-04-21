@@ -6,6 +6,7 @@ Local-first tracker for AI-assisted development. Measures **focus time**,
 **code produced** (real vs generated), and **LLM cost** across Claude Code,
 Codex, Cursor, git, and shell activity — all from your own machine, no SaaS.
 
+[![CI](https://github.com/Mr1000xGrowth/ship1000x/actions/workflows/test.yml/badge.svg)](https://github.com/Mr1000xGrowth/ship1000x/actions/workflows/test.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![Status: Alpha](https://img.shields.io/badge/status-alpha-orange.svg)]()
