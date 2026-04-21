@@ -42,7 +42,6 @@ dependencies = [
     "rich>=13.7",
     "pyyaml>=6.0",
     "boto3>=1.34",
-    "flask>=3.0",
 ]
 
 [project.optional-dependencies]
@@ -63,8 +62,6 @@ ship1000x = "ship1000x.cli:main"
 where = ["."]
 include = ["ship1000x*"]
 
-[tool.setuptools.package-data]
-ship1000x = ["dashboard/templates/*.html", "dashboard/static/*"]
 
 [tool.ruff]
 line-length = 100
