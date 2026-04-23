@@ -5,7 +5,7 @@ Pattern d'usage :
     $ tracker drop ~/Downloads/conversations.json
     $ tracker drop ~/Downloads/chatgpt-export/
 
-Ou dossier surveille : `~/ai-time-tracker/drop/` scanne a chaque ingest.
+Ou dossier surveille : `<package>/drop/` (cf. DEFAULT_DROP_DIR) scanne a chaque ingest.
 
 Formats supportes (V1) :
 - Claude.ai ZIP : contient `conversations.json` avec threads/messages

@@ -397,7 +397,10 @@ def scan_sources(privacy_config: dict[str, Any] | None = None) -> list[SourceHea
     ))
 
     # 12. Drop folder (imports manuels Claude.ai / ChatGPT)
-    p = HOME / "ai-time-tracker" / "drop"
+    # Pointe vers le meme dossier que collectors/web_exports.py:DEFAULT_DROP_DIR
+    # (package_root/drop). Import lazy pour eviter le circular import.
+    from ..collectors.web_exports import DEFAULT_DROP_DIR
+    p = DEFAULT_DROP_DIR
     size, count, last = _dir_stats(p) if p.exists() else (0, 0, None)
     results.append(SourceHealth(
         id="web_exports",
