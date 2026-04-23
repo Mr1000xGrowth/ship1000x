@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from ..core.pricing import is_hourly_estimated
+
 
 def _fmt_hours(sec: int | None) -> str:
     if not sec:
@@ -39,6 +41,7 @@ def generate_report(storage, cutoff: datetime, since_label: str = "") -> str:
         SELECT
             COUNT(DISTINCT id) AS events,
             SUM(duration_sec) AS active_sec,
+            SUM(wall_clock_sec) AS wall_clock_sec,
             SUM(token_input + token_output) AS tokens,
             SUM(cost_estimated) AS cost,
             COUNT(DISTINCT source) AS sources,
@@ -54,12 +57,50 @@ def generate_report(storage, cutoff: datetime, since_label: str = "") -> str:
         lines.append("> Aucune donnee sur cette fenetre.")
         return "\n".join(lines)
 
+    # Multiplicateur IA = temps agents cumule / temps actif humain.
+    # Chaque heure humaine orchestre ~N heures d'execution agent en parallele.
+    # Plus robuste que le "% pilotage" qui fluctue fortement avec le cap.
+    active_sec = t["active_sec"] or 0
+    wall_clock_sec = t["wall_clock_sec"] or 0
+    ai_multiplier = wall_clock_sec / active_sec if active_sec > 0 else 0
+
+    # Split cout mesure (tokens reels Anthropic/OpenAI) vs estime horaire
+    # (Codex.app / Codex Desktop / Cursor — apps fermees).
+    cost_split = storage.query(
+        """
+        SELECT source, SUM(cost_estimated) AS cost
+        FROM events
+        WHERE started_at >= ?
+        GROUP BY source
+        """,
+        (cutoff.isoformat(),),
+    )
+    cost_measured = sum(
+        (r["cost"] or 0) for r in cost_split if not is_hourly_estimated(r["source"])
+    )
+    cost_hourly = sum(
+        (r["cost"] or 0) for r in cost_split if is_hourly_estimated(r["source"])
+    )
+
     lines.append("## Vue d'ensemble")
     lines.append("")
-    lines.append(f"- **Temps actif total** : {_fmt_hours(t['active_sec'])}")
+    lines.append(f"- **Temps actif humain** : {_fmt_hours(active_sec)}")
+    lines.append(f"- **Temps agents cumule** : {_fmt_hours(wall_clock_sec)} "
+                 f"(wall-clock first event -> last event, sommes par source)")
+    if ai_multiplier > 0:
+        lines.append(f"- **Multiplicateur IA** : **x{ai_multiplier:.1f}** "
+                     f"(chaque heure humaine orchestre ~{ai_multiplier:.1f}h d'execution agent)")
     lines.append(f"- **Events** : {_fmt_int(t['events'])}")
     lines.append(f"- **Tokens IA** : {_fmt_int(t['tokens'])}")
-    lines.append(f"- **Cout estime** : ${t['cost'] or 0:.2f}")
+    total_cost = t['cost'] or 0
+    if cost_hourly > 0 and cost_measured > 0:
+        lines.append(
+            f"- **Cout estime** : ${total_cost:.2f} "
+            f"(${cost_measured:.2f} mesure tokens reels · "
+            f"${cost_hourly:.2f} estime horaire apps fermees)"
+        )
+    else:
+        lines.append(f"- **Cout estime** : ${total_cost:.2f}")
     lines.append(f"- **Sources** : {t['sources']}")
     lines.append(f"- **Projets** : {t['projects']}")
     lines.append("")

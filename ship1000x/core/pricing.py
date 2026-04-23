@@ -128,3 +128,23 @@ def estimate_openai_cost(
     # besoin de l'ajouter separement. Parametre conserve pour traçabilite.
     cost += (tokens_output / 1_000_000) * rates.get("output", DEFAULT_PRICING["output"])
     return cost
+
+
+# ─── Sources estimees par heure vs tokens reels ──────────────────────
+# Certaines apps ne captent pas les tokens reels (logs Electron frontend,
+# DB Cursor...) : on estime leur cout a partir du temps actif x tarif
+# horaire (generalement calibre sur les abos Pro/Max pour rester realiste).
+#
+# Utilise par les exporters pour distinguer "cost-if-metered" (tokens reels
+# Anthropic/OpenAI) de "cost-if-hourly" (estime pour apps fermees).
+HOURLY_ESTIMATED_SOURCES = frozenset({
+    "codex_macapp",     # Codex.app macOS : logs Electron, pas de tokens
+    "codex_desktop",    # Codex Desktop SSE : echantillonne, pas de facturation tokens
+    "cursor",           # Cursor AI : DB fermee, heures uniquement
+    "cline",            # Extension Cline (Cursor) : idem
+})
+
+
+def is_hourly_estimated(source: str) -> bool:
+    """True si le cout de cette source est estime par heure (pas par tokens reels)."""
+    return source in HOURLY_ESTIMATED_SOURCES
