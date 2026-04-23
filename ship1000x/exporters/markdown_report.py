@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from ..core.intervals import union_active_sec_from_events
 from ..core.pricing import is_hourly_estimated
 
 
@@ -35,12 +36,12 @@ def generate_report(storage, cutoff: datetime, since_label: str = "") -> str:
     lines.append(f"*Genere le {today} · Fenetre : depuis {cutoff.date()}*")
     lines.append("")
 
-    # Totaux globaux
+    # Totaux globaux (sans active_sec SQL : il serait sommé naïvement cross-sources,
+    # ce qui double-compte les overlaps Claude Code + Codex.app simultanes).
     totals = storage.query(
         """
         SELECT
             COUNT(DISTINCT id) AS events,
-            SUM(duration_sec) AS active_sec,
             SUM(wall_clock_sec) AS wall_clock_sec,
             SUM(token_input + token_output) AS tokens,
             SUM(cost_estimated) AS cost,
@@ -53,14 +54,29 @@ def generate_report(storage, cutoff: datetime, since_label: str = "") -> str:
     )
     t = totals[0] if totals else None
 
-    if not t or (t["active_sec"] or 0) == 0:
+    # Temps actif humain via UNION d'intervalles cross-sources : si Claude Code
+    # CLI et Codex.app macOS tournent en parallele, les minutes humaines ne
+    # sont comptees qu'une fois. Cf core/intervals.py + parite dashboard
+    # VantaCrew (filterByDays -> unionDurationSec).
+    interval_rows = storage.query(
+        """
+        SELECT started_at, duration_sec
+        FROM events
+        WHERE started_at >= ?
+          AND duration_sec > 0
+          AND source != 'git'
+        """,
+        (cutoff.isoformat(),),
+    )
+    active_sec = union_active_sec_from_events(interval_rows)
+
+    if not t or active_sec == 0:
         lines.append("> Aucune donnee sur cette fenetre.")
         return "\n".join(lines)
 
     # Multiplicateur IA = temps agents cumule / temps actif humain.
     # Chaque heure humaine orchestre ~N heures d'execution agent en parallele.
     # Plus robuste que le "% pilotage" qui fluctue fortement avec le cap.
-    active_sec = t["active_sec"] or 0
     wall_clock_sec = t["wall_clock_sec"] or 0
     ai_multiplier = wall_clock_sec / active_sec if active_sec > 0 else 0
 
