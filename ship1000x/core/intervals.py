@@ -17,7 +17,6 @@ from __future__ import annotations
 
 from datetime import datetime
 
-
 Interval = tuple[float, float]  # (start_epoch, end_epoch)
 
 
