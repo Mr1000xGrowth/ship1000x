@@ -56,8 +56,7 @@ def generate_report(storage, cutoff: datetime, since_label: str = "") -> str:
 
     # Temps actif humain via UNION d'intervalles cross-sources : si Claude Code
     # CLI et Codex.app macOS tournent en parallele, les minutes humaines ne
-    # sont comptees qu'une fois. Cf core/intervals.py + parite dashboard
-    # VantaCrew (filterByDays -> unionDurationSec).
+    # sont comptees qu'une fois. Cf core/intervals.py.
     interval_rows = storage.query(
         """
         SELECT started_at, duration_sec

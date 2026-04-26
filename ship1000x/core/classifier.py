@@ -172,7 +172,7 @@ def resolve_repo_uid(path: str | None) -> tuple[str, str, float]:
       4. rien → ("", "", 0.0)
 
     IMPORTANT : on ne traite QUE les paths absolus qui existent sur disque.
-    Les paths relatifs (`memory`, `src/foo.tsx`, `charlesgautier`) sont
+    Les paths relatifs (`memory`, `src/foo.tsx`, `myname`) sont
     IGNORES (retour "") plutot que classes en `dir:xxx`. Raison : un path
     relatif extrait d'un tool_use Claude Code se resout contre le cwd du
     tracker Python → classifications trompeuses.
@@ -315,7 +315,7 @@ class Classifier:
           1. glob match (pour paths absolus type `/Users/.../my-project/...`)
           2. substring match sur project.id et derniers segments des patterns
              (pour paths relatifs type `src/components/...` ou cwd ambigu
-             comme `/Users/charlesgautier/ClaudeCode - Test OpenClaw GHL`)
+             comme `/Users/<username>/Projects/my-app`)
         """
         counts: dict[str, int] = {}
 

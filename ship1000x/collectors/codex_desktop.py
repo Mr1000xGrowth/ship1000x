@@ -15,7 +15,7 @@ On extrait :
   - turns = nb de "response.created"
   - timestamps turns = les ts des "response.created" + "response.completed"
     -> active_sec via intervalles ponderes (idem claude_code)
-  - paths = extraction regex des /Users/charlesgautier/... dans les messages
+  - paths = extraction regex des /Users/<username>/... dans les messages
     -> classification project_id + split multi-projets
   - wall_clock_sec = last_ts - first_ts par process_uuid
 """

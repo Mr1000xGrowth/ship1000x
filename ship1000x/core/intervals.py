@@ -8,9 +8,6 @@ qu'une fois mais chaque source compte sa duree de son cote.
 Solution : collecter les intervalles [start, end] de tous les events
 qualifies, les trier, fusionner ceux qui se chevauchent, sommer les durees
 fusionnees. Resultat = vrai temps humain sans double-compte cross-sources.
-
-Analogue Python du helper TypeScript `unionDurationSec` du dashboard
-(vantacrew-cartography/src/modules/ai-tracking/lib/interval-union.ts).
 """
 
 from __future__ import annotations
