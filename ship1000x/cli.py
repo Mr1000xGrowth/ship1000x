@@ -1072,6 +1072,38 @@ def daily(ctx: click.Context):
     privacy_config = _load_yaml(PRIVACY_CONFIG)
     consent = privacy_config.get("consent") or {}
     cloud = privacy_config.get("cloud") or {}
+
+    # Avant le push, signaler les projets nouveaux apparus en DB sans entree
+    # explicite dans `share` map. Ils heritent de `_default` (private par
+    # defaut → safe), mais on previent l'utilisateur pour qu'il les classifie
+    # consciemment via `ship1000x projects --select`. En mode cron (non-TTY)
+    # on log juste le warning, pas de prompt bloquant.
+    if consent.get("share_cloud"):
+        from ship1000x.core.consent_wizard import (
+            collect_db_projects,
+            find_unclassified_projects,
+        )
+        storage = _get_storage()
+        db_projects = collect_db_projects(storage)
+        share_config = privacy_config.get("share") or {}
+        unclassified = find_unclassified_projects(
+            [p.project_id for p in db_projects], share_config
+        )
+        if unclassified:
+            default_level = share_config.get("_default", "private")
+            console.print(
+                f"[yellow]⚠[/yellow]  [daily] {len(unclassified)} projet(s) non-classifie(s) "
+                f"dans privacy.yaml (heritent `_default` = {default_level}) :"
+            )
+            for pid in unclassified[:5]:
+                console.print(f"    - {pid}")
+            if len(unclassified) > 5:
+                console.print(f"    ... et {len(unclassified) - 5} autres")
+            console.print(
+                "    [dim]Lance [cyan]ship1000x projects --select[/cyan] "
+                "pour les classifier explicitement.[/dim]"
+            )
+
     if consent.get("share_cloud") and cloud.get("push_enabled"):
         console.print("[cyan][daily][/cyan] Push rollups...")
         ctx.invoke(push, since=None, dry_run=False)
