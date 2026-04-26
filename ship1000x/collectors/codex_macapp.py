@@ -297,10 +297,16 @@ def collect(
             # capturent vraiment 1 event par prompt user.
             turns_floor = turns * 60
 
-            # Floor wall-clock si turns suffisants
-            if turns >= 3 and wall_sec > 0:
-                wall_floor = int(wall_sec * 0.60)
-                active_sec = max(active_sec, wall_floor)
+            # NOTE : floor wall-clock 60% retire pour aligner avec claude_code.
+            # Avant, "Codex.app ouvert au foreground 9h avec 3 prompts"
+            # reportait 5.4h actif (60% x 9h) meme sans usage reel. Asymetrie
+            # avec Claude Code (pas de floor wall-clock) qui faisait un ratio
+            # Codex/Claude artificiel ~4x.
+            # Si besoin de re-activer pour debugging, decommenter le bloc.
+            #
+            # if turns >= 3 and wall_sec > 0:
+            #     wall_floor = int(wall_sec * 0.60)
+            #     active_sec = max(active_sec, wall_floor)
 
             active_sec = max(active_sec, turns_floor)
             if wall_sec > 0:
