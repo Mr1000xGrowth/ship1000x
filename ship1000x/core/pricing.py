@@ -18,7 +18,10 @@ from __future__ import annotations
 # Anthropic / Claude
 # Tarifs par million de tokens (USD)
 ANTHROPIC_PRICING = {
-    # Claude 4.6 family (2026)
+    # Claude 4.7 family (janvier 2026)
+    "claude-opus-4-7": {"input": 15.0, "output": 75.0, "cache_read": 1.50, "cache_write": 18.75},
+    "claude-sonnet-4-7": {"input": 3.0, "output": 15.0, "cache_read": 0.30, "cache_write": 3.75},
+    # Claude 4.6 family (2025-2026)
     "claude-opus-4-6": {"input": 15.0, "output": 75.0, "cache_read": 1.50, "cache_write": 18.75},
     "claude-sonnet-4-6": {"input": 3.0, "output": 15.0, "cache_read": 0.30, "cache_write": 3.75},
     "claude-haiku-4-5": {"input": 0.80, "output": 4.0, "cache_read": 0.08, "cache_write": 1.0},
