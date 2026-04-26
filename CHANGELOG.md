@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Per-project consent wizard** : `ship1000x init` and the new
+  `ship1000x projects --select` flag prompt for the share level
+  (`aggregated` / `private` / `disabled`) of each detected project, instead
+  of defaulting every git repo to `aggregated` silently.
+- **Unclassified projects warning** : `ship1000x daily` now lists projects
+  present in the local DB but absent from the `share` map in `privacy.yaml`,
+  pointing the user at `ship1000x projects --select`. New projects still
+  fall back to `_default` (private by default) so nothing leaks
+  unintentionally.
+- **`core/consent_wizard` module** : reusable helpers
+  (`prompt_share_levels`, `find_unclassified_projects`,
+  `collect_db_projects`, `collect_detected_repos`) covered by 14 new
+  unit tests.
+
 ### Planned for v0.2.0
 - Local Flask web dashboard (`ship1000x dashboard` → `localhost:8765`)
 - First PyPI release

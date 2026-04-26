@@ -109,8 +109,12 @@ Three levels per-project :
 - `aggregated` : daily rollups (date, project, duration, event count) may
   be pushed to your own S3 bucket if `share_cloud: true`
 
-You can change levels any time via `ship1000x privacy` or by editing
-`config/privacy.yaml`.
+`ship1000x init` walks you through the share level for each detected
+project. Run `ship1000x projects --select` any time to reconfigure (useful
+after onboarding a new client repo or moving a side project off your work
+machine). `ship1000x privacy` shows the current state read-only, and
+`ship1000x daily` warns you when new projects appear in the DB without an
+explicit entry in your `share` map.
 
 ## Optional : push to your own S3 bucket
 
@@ -163,6 +167,8 @@ ruff check .
 - [x] 40+ CLI commands + Markdown export
 
 **v0.2.0** (next)
+- [x] Per-project consent wizard (`init` + `projects --select`)
+- [x] Unclassified-projects warning at `daily`
 - [ ] Local Flask web dashboard (`ship1000x dashboard` → `localhost:8765`)
 - [ ] PyPI release
 - [ ] GitHub API enrichment (CI status, PR reviews)
