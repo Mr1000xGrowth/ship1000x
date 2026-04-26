@@ -103,20 +103,48 @@ def run_init(repo_root: Path, projects_yaml: Path, privacy_yaml: Path, console: 
     )
     console.print()
 
-    # 3. Auto-detection projets
-    console.print("[bold]3/5 · Detection automatique des projets[/bold]")
+    # 3. Auto-detection projets + selection share level per-project
+    console.print("[bold]3/5 · Detection des projets et selection du partage[/bold]")
     scan_root = repo_root.parent  # repo parent = dossier travail
     console.print(f"  Scan de : {scan_root}")
     detected = _detect_git_repos(scan_root)
     if detected:
-        console.print(f"  [green]✓[/green] {len(detected)} repos detectes :")
-        for repo in detected[:10]:
-            console.print(f"    - {repo['name']}")
-        if len(detected) > 10:
-            console.print(f"    ... et {len(detected) - 10} autres")
+        console.print(f"  [green]✓[/green] {len(detected)} repos detectes")
     else:
         console.print("  [yellow]Aucun repo git detecte[/yellow]")
     console.print()
+
+    # Si l'utilisateur a active le partage cloud, on lui propose de classifier
+    # chaque repo. Sinon on saute (rien ne sortira de toute facon, _default=private).
+    project_share_overrides: dict[str, str] = {}
+    if detected and share_cloud:
+        from ship1000x.core.consent_wizard import (
+            collect_detected_repos,
+            prompt_share_levels,
+        )
+
+        existing_share = (yaml.safe_load(privacy_yaml.read_text()) or {}).get("share", {}) if privacy_yaml.exists() else {}
+        existing_share = existing_share or {}
+        existing_share.setdefault("_default", "private")
+
+        projects = collect_detected_repos(detected)
+        if Confirm.ask(
+            f"  Classifier les {len(projects)} projets maintenant ? (sinon : tout reste en `private` par defaut)",
+            default=True,
+        ):
+            project_share_overrides = prompt_share_levels(
+                projects, existing_share, console, share_cloud=True
+            )
+        else:
+            console.print(
+                "  [dim]OK. Tu pourras classifier plus tard avec "
+                "[cyan]ship1000x projects --select[/cyan].[/dim]"
+            )
+    elif detected:
+        console.print(
+            "  [dim]Partage cloud desactive : pas besoin de classifier "
+            "(rien ne sortira de ta machine).[/dim]"
+        )
     console.print(f"  Pour personnaliser les regles de classification, edite : [cyan]{projects_yaml}[/cyan]")
     console.print()
 
@@ -167,11 +195,19 @@ def run_init(repo_root: Path, projects_yaml: Path, privacy_yaml: Path, console: 
         config["cloud"]["push_time"] = cron_time
         config["cloud"]["retention_days"] = 365
 
+    # Si le user a explicitement choisi des share levels via le wizard, on les
+    # applique avant la migration. Sinon `migrate_privacy_config` mettrait tous
+    # les repos detectes en `aggregated` automatiquement (legacy V1).
+    if project_share_overrides:
+        config["share"] = project_share_overrides
+
     # Migration unifiee : applique sources + share._default + retention + defaults
     # pour garantir que tout est coherent quel que soit le point d'entree
-    # (init initial, re-init sur yaml existant, autre version CLI).
+    # (init initial, re-init sur yaml existant, autre version CLI). On ne passe
+    # pas `detected_repos` car le wizard interactif a deja gere le `share` map.
     from ship1000x.core.config_migration import migrate_privacy_config
-    config, _ = migrate_privacy_config(config, detected_repos=detected)
+    repos_for_migration = None if project_share_overrides else detected
+    config, _ = migrate_privacy_config(config, detected_repos=repos_for_migration)
 
     privacy_yaml.write_text(yaml.dump(config, default_flow_style=False, sort_keys=False, allow_unicode=True))
 

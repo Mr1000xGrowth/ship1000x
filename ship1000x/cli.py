@@ -402,23 +402,91 @@ def project(project_id: str, since: str):
 
 
 @cli.command()
-def projects():
-    """Liste tous les projets configures."""
+@click.option(
+    "--select",
+    "select_mode",
+    is_flag=True,
+    help="Mode interactif : reconfigurer le share level (aggregated/private/disabled) par projet.",
+)
+def projects(select_mode: bool):
+    """Liste les projets configures (et leur share level si --select)."""
+    if select_mode:
+        _run_projects_select()
+        return
+
     classifier = _get_classifier()
+    privacy_config = _load_yaml(PRIVACY_CONFIG)
+    share = privacy_config.get("share") or {}
+    default_level = share.get("_default", "private")
+
     table = Table(title="Projets configures", show_header=True)
     table.add_column("ID", style="cyan")
     table.add_column("Nom")
     table.add_column("Category")
     table.add_column("Paths patterns")
+    table.add_column("Partage")
 
     for rule in classifier.rules:
+        level = share.get(rule.id, default_level)
         table.add_row(
             rule.id,
             rule.name,
             rule.category,
             ", ".join(rule.paths[:2]),
+            level,
         )
     console.print(table)
+
+
+def _run_projects_select() -> None:
+    """Mode interactif : reconfigure le share level de chaque projet connu.
+
+    Source des projets : DB locale (via collect_db_projects) + repos git
+    detectes sous le HOME (via setup_wizard._detect_git_repos). Ecrit le
+    nouveau `share` map dans privacy.yaml.
+    """
+    from ship1000x.core.consent_wizard import (
+        collect_db_projects,
+        collect_detected_repos,
+        merge_project_lists,
+        prompt_share_levels,
+    )
+    from ship1000x.core.setup_wizard import _detect_git_repos
+
+    privacy_config = _load_yaml(PRIVACY_CONFIG)
+    consent = privacy_config.get("consent") or {}
+    if not consent.get("signed_at"):
+        console.print(
+            "[red]✗[/red] Consent non signe. Lance [cyan]ship1000x init[/cyan] d'abord."
+        )
+        return
+
+    share_cloud = bool(consent.get("share_cloud", False))
+    current_share = privacy_config.get("share") or {}
+    current_share.setdefault("_default", "aggregated" if share_cloud else "private")
+
+    storage = _get_storage()
+    db_projects = collect_db_projects(storage)
+    scan_root = REPO_ROOT.parent
+    detected_projects = collect_detected_repos(_detect_git_repos(scan_root))
+    projects_list = merge_project_lists(db_projects, detected_projects)
+
+    if not projects_list:
+        console.print(
+            "[yellow]Aucun projet connu. Lance [cyan]ship1000x ingest[/cyan] d'abord.[/yellow]"
+        )
+        return
+
+    new_share = prompt_share_levels(
+        projects_list, current_share, console, share_cloud=share_cloud
+    )
+
+    privacy_config["share"] = new_share
+    PRIVACY_CONFIG.write_text(
+        yaml.dump(privacy_config, default_flow_style=False, sort_keys=False, allow_unicode=True)
+    )
+    console.print()
+    console.print(f"[green]✓[/green] Configuration mise a jour : {PRIVACY_CONFIG}")
 
 
 @cli.command()
