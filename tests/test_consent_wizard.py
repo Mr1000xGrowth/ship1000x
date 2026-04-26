@@ -56,13 +56,14 @@ def test_find_unclassified_empty_when_all_classified():
 
 
 def test_collect_detected_repos_extracts_github_slug():
+    """Format aligne sur classifier : `host/owner/repo` lowercase, pas `gh:` prefix."""
     detected = [
         {"name": "ship1000x", "path": "/Users/x/ship1000x",
          "remote": "git@github.com:Mr1000xGrowth/ship1000x.git"},
     ]
     projects = collect_detected_repos(detected)
     assert len(projects) == 1
-    assert projects[0].project_id == "gh:Mr1000xGrowth/ship1000x"
+    assert projects[0].project_id == "github.com/mr1000xgrowth/ship1000x"
     assert projects[0].detection == "git_remote"
 
 
@@ -79,7 +80,17 @@ def test_collect_detected_repos_handles_https_url():
          "remote": "https://github.com/owner/foo.git"},
     ]
     projects = collect_detected_repos(detected)
-    assert projects[0].project_id == "gh:owner/foo"
+    assert projects[0].project_id == "github.com/owner/foo"
+
+
+def test_collect_detected_repos_handles_gitlab_remote():
+    detected = [
+        {"name": "internal", "path": "/Users/x/internal",
+         "remote": "git@gitlab.com:team/internal.git"},
+    ]
+    projects = collect_detected_repos(detected)
+    assert projects[0].project_id == "gitlab.com/team/internal"
+    assert projects[0].detection == "git_remote"
 
 
 def test_merge_project_lists_dedups_and_keeps_highest_signal():

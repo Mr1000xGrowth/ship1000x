@@ -171,15 +171,21 @@ def collect_db_projects(storage: Any) -> list[ProjectInfo]:
     except Exception:
         return []
 
+    import re
+    git_remote_pattern = re.compile(r"^[a-z0-9.-]+\.[a-z]{2,}/[^/]+/[^/]+$")
     projects: list[ProjectInfo] = []
     for r in rows:
         pid = r["project_id"]
-        detection = (
-            "git_remote" if pid.startswith("gh:")
-            else "local_git" if pid.startswith("local:")
-            else "dir" if pid.startswith("dir:")
-            else "db_known"
-        )
+        # Format canonique classifier : `host/owner/repo` lowercase pour
+        # repos avec remote, `local:name` ou `dir:name` sinon.
+        if pid.startswith("local:"):
+            detection = "local_git"
+        elif pid.startswith("dir:"):
+            detection = "dir"
+        elif git_remote_pattern.match(pid):
+            detection = "git_remote"
+        else:
+            detection = "db_known"
         projects.append(
             ProjectInfo(
                 project_id=pid,
@@ -194,20 +200,27 @@ def collect_db_projects(storage: Any) -> list[ProjectInfo]:
 def collect_detected_repos(detected: list[dict[str, str]]) -> list[ProjectInfo]:
     """Convertit la liste retournee par setup_wizard._detect_git_repos en ProjectInfo.
 
-    Le project_id ressemblera a `gh:owner/repo` pour les repos avec remote
-    GitHub, sinon `local:<name>` pour les repos sans remote.
+    Aligne sur le format canonique du classifier (cf core/classifier.py
+    `_normalize_git_remote`) pour que les project_ids des repos detectes
+    matchent ceux ecrits en DB lors de l'ingest. Sinon `merge_project_lists`
+    creerait des doublons cosmetiques (ex: `gh:Owner/Repo` cote scan vs
+    `github.com/owner/repo` cote DB).
+
+    Format produit :
+      - Avec remote git (any host) : `<host>/<owner>/<repo>` lowercase
+        (ex: `github.com/user/repo`, `gitlab.com/user/repo`)
+      - Sans remote : `local:<dir-name>` (preserve le nom du dossier)
     """
+    from ship1000x.core.classifier import _normalize_git_remote
+
     projects: list[ProjectInfo] = []
     for repo in detected:
         name = repo.get("name") or ""
         remote = repo.get("remote") or ""
-        if "github.com" in remote:
-            slug = remote.split("github.com")[-1].lstrip(":/").removesuffix(".git")
-            project_id = f"gh:{slug}"
+        normalized = _normalize_git_remote(remote)
+        if normalized:
+            project_id = normalized
             detection = "git_remote"
-        elif remote:
-            project_id = f"local:{name}"
-            detection = "local_git"
         else:
             project_id = f"local:{name}"
             detection = "dir"
