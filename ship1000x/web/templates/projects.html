@@ -76,7 +76,7 @@ function renderRows() {
   } else {
     tbody.innerHTML = rows.map(p => `
       <tr class="hover:bg-chalk dark:hover:bg-slate/30 transition">
-        <td class="px-5 py-3 font-mono text-xs text-ink dark:text-paper">${p.project_id}</td>
+        <td class="px-5 py-3 font-mono text-xs text-ink dark:text-paper">${window.anonymizeProjectId(p.project_id)}</td>
         <td class="px-5 py-3 text-right font-numeric font-medium">${fmtH(p.total_hours)}</td>
         <td class="px-5 py-3 text-xs">
           ${p.dominant_tool === 'git only'

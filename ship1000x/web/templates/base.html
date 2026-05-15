@@ -79,6 +79,7 @@
           </div>
         </div>
         <div class="flex items-center gap-5 text-sm">
+          <span id="demo-badge" class="hidden text-[10px] uppercase tracking-[0.2em] text-ambre-600 font-semibold border border-ambre-500 rounded px-2 py-0.5">demo</span>
           <select id="window-select" class="bg-transparent border border-mist dark:border-slate rounded-md px-3 py-1.5 text-xs font-medium text-stone hover:text-ink dark:hover:text-paper hover:border-stone transition cursor-pointer">
             <option value="7">7 days</option>
             <option value="14">14 days</option>
@@ -88,6 +89,9 @@
             <option value="180">180 days</option>
             <option value="365">1 year</option>
           </select>
+          <button id="demo-toggle" onclick="toggleDemo()" class="text-stone hover:text-ambre-500 transition" title="Toggle demo mode (anonymize project names)">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
           <button onclick="document.documentElement.classList.toggle('dark')" class="text-stone hover:text-ambre-500 transition" title="Toggle theme">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
           </button>
@@ -123,6 +127,40 @@
       if (typeof reloadData === 'function') reloadData();
     });
     window.getWindowDays = () => parseInt(winSel.value, 10);
+
+    // ─── Demo mode : anonymize project IDs ────────────────────────────
+    // Persistent mapping real_id → "project-A/B/C…" so the same project
+    // shows the same alias across reloads and across pages.
+    window._demoMap = JSON.parse(localStorage.getItem('ship1000x-demo-map') || '{}');
+
+    window.anonymizeProjectId = function(realId) {
+      if (!document.body.classList.contains('demo')) return realId;
+      if (!realId || realId === 'unclassified') return realId;
+      if (!(realId in window._demoMap)) {
+        const idx = Object.keys(window._demoMap).length;
+        const first = idx >= 26 ? String.fromCharCode(65 + Math.floor(idx / 26) - 1) : '';
+        const second = String.fromCharCode(65 + (idx % 26));
+        window._demoMap[realId] = `project-${first}${second}`;
+        localStorage.setItem('ship1000x-demo-map', JSON.stringify(window._demoMap));
+      }
+      return window._demoMap[realId];
+    };
+
+    window.toggleDemo = function() {
+      const on = !document.body.classList.contains('demo');
+      document.body.classList.toggle('demo', on);
+      document.getElementById('demo-badge').classList.toggle('hidden', !on);
+      document.getElementById('demo-toggle').classList.toggle('text-ambre-500', on);
+      localStorage.setItem('ship1000x-demo-mode', on ? '1' : '0');
+      if (typeof reloadData === 'function') reloadData();
+    };
+
+    // Restore demo mode from previous visit
+    if (localStorage.getItem('ship1000x-demo-mode') === '1') {
+      document.body.classList.add('demo');
+      document.getElementById('demo-badge').classList.remove('hidden');
+      document.getElementById('demo-toggle').classList.add('text-ambre-500');
+    }
   </script>
 
   {% block scripts %}{% endblock %}

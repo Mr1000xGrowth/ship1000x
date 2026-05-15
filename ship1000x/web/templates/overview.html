@@ -305,7 +305,8 @@ async function loadProjectsForR3(days) {
       opt.dataset.commits = p.commits;
       opt.dataset.cost = p.total_cost;
       opt.dataset.tool = p.dominant_tool;
-      opt.textContent = `${p.project_id}  ·  ${p.total_hours}h  ·  ${p.commits} commits`;
+      const label = window.anonymizeProjectId(p.project_id);
+      opt.textContent = `${label}  ·  ${p.total_hours}h  ·  ${p.commits} commits`;
       select.appendChild(opt);
     });
     const savedId = localStorage.getItem('ship1000x-r3-project');
