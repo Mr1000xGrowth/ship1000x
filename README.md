@@ -9,7 +9,7 @@ Codex, Cursor, git, and shell activity — all from your own machine, no SaaS.
 [![CI](https://github.com/Mr1000xGrowth/ship1000x/actions/workflows/test.yml/badge.svg)](https://github.com/Mr1000xGrowth/ship1000x/actions/workflows/test.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-[![Status: Beta v0.4.0](https://img.shields.io/badge/status-beta%20v0.4.0-c8a464.svg)]()
+[![Status: Beta v0.5.0](https://img.shields.io/badge/status-beta%20v0.5.0-c8a464.svg)]()
 
 ## Why
 
@@ -38,7 +38,7 @@ ship1000x ingest            # first scan of your AI tool logs
 ship1000x today             # see today's activity
 ```
 
-In beta (`v0.4.0`), install from source :
+In beta (`v0.5.0`), install from source :
 
 ```bash
 git clone https://github.com/Mr1000xGrowth/ship1000x.git
@@ -94,6 +94,20 @@ Premium neutral design (Inter typography, ambre accent), localhost-only
 Pages : Overview (6 metric cards + trend chart + Trust Score breakdown by
 source) + Projects (sortable matrix project × tool × cost). Window selector
 7 / 14 / 30 / 60 / 90 / 180 / 365 days. Dark mode auto.
+
+## What's new in v0.5.0 (May 2026)
+
+- **3-ratios overview redesign** — the dashboard now reports R1 (Time leverage,
+  Factual), R2 (Agent efficiency, Indicative), and R3 (Project output vs human
+  team, Estimative · your input) as separate sections with explicit confidence
+  labels. No more conflating "AI Leverage ×N" without saying which ratio.
+- **R3 interactive widget** — pick a project, enter equivalent team size +
+  months → leverage computed and persisted per-project in localStorage.
+  Honest disclaimer: only YOU know your project's true scope.
+- **Trust Score honesty fix** — score is now the raw weighted-average of
+  per-source confidence (no more silent capping of `base + bonuses → 100`).
+  Ex-bonuses become independent **robustness checks** (cadence, unified,
+  critical sources) reported alongside, never inside, the score.
 
 ## What's new in V1 (v0.2.0 → v0.4.0)
 
@@ -164,8 +178,13 @@ Run `ship1000x --help` for the full list (40+ commands including
 │   Coût agentique               $5 396      [93% Factual, rest heuristic]     │
 │   Cost / ligne nette           $0.0082   ultra-efficient                     │
 │                                                                              │
-│   Trust Score                  96/100     base (Factual). +8 bonuses → 100   │
+│   Trust Score                  96/100     Factual · weighted avg per source  │
 │   Sources captées              7          Factual + Defensible               │
+│                                                                              │
+│   Robustness checks                                                          │
+│     ✓ Cadence calibrated  P95 = 21.6 min (sample 1946)                       │
+│     ✓ Cross-source unified  31 daily rows merged                             │
+│     ✓ Critical sources present  All present: claude_code, git                │
 │                                                                              │
 │   → Avec 1h de ton temps, tu génères ~3.0h d'exécution agentique             │
 │     et 2361 lignes de vrai code défendable.                                  │
@@ -224,11 +243,19 @@ Profil : sessions tres etalees (pauses cafe naturelles incluses)
 ### Web dashboard (`ship1000x dashboard`)
 
 Premium neutral design (Inter + ambre accent), localhost-only, dark mode auto.
-2 pages : Overview (highlights + trend chart + Trust Score breakdown) +
-Projects (sortable matrix). Window selector 7/14/30/60/90/180/365 days.
+Overview restructured around the **3 distinct ratios** of AI leverage —
+each labelled (Factual / Indicative / Estimative). Window selector
+7 / 14 / 30 / 60 / 90 / 180 / 365 days.
 
-> 📸 Screenshots coming — open `http://localhost:10000` after running
-> `ship1000x dashboard` to see live.
+| Light mode | Dark mode |
+|---|---|
+| ![Overview light](docs/assets/dashboard-overview-light.png) | ![Overview dark](docs/assets/dashboard-overview-dark.png) |
+
+**R3 interactive widget** — pick a project, enter equivalent team size +
+months → leverage computed (here ×52.8: 10 people × 5 months vs 166h on
+`vantacrew-console`). Estimates persist per-project in localStorage.
+
+![R3 widget](docs/assets/dashboard-r3-widget.png)
 
 ## Privacy & consent
 
@@ -326,10 +353,17 @@ ruff check .
 - [x] Aliases support in `projects.yaml` (merge logically-same projects)
 - [x] CI green on Python 3.10/3.11/3.12 (ubuntu + macos)
 
-**v0.5.0** (next)
+**v0.5.0** — Trust Score honesty + 3-ratios overview (May 2026)
+- [x] Trust Score = raw weighted-average per source (no more `base + bonuses → 100` cap)
+- [x] Robustness checks reported separately from the score (cadence, unified, critical sources)
+- [x] Web dashboard overview restructured around R1 / R2 / R3 with explicit confidence labels
+- [x] R3 interactive widget (project selector + people/months → leverage, persisted per-project)
+- [x] CHANGELOG documents the rationale (the `96 + 8 = 100` incident)
+
+**v0.6.0** (next)
 - [ ] PyPI release (`pip install ship1000x`)
-- [ ] `tracker explain <metric>` for inline transparency
-- [ ] `tracker reconcile` integrated (Anthropic Admin API cross-check)
+- [ ] `ship1000x explain <metric>` for inline transparency
+- [ ] `ship1000x reconcile` integrated (Anthropic Admin API cross-check)
 - [ ] PDF export (audit-ready format)
 - [ ] Continue.dev, Aider, Antigravity collectors (community welcome — see [CONTRIBUTING.md](CONTRIBUTING.md))
 
