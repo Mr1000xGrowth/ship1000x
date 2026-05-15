@@ -1,0 +1,187 @@
+{% extends "base.html" %}
+
+{% block title %}Overview · Ship1000x{% endblock %}
+
+{% block content %}
+<div class="space-y-8">
+
+  <div>
+    <h1 class="text-3xl font-bold mb-2">🚀 Highlights</h1>
+    <p class="text-gray-500 dark:text-gray-400 text-sm" id="window-label">Last 30 days</p>
+  </div>
+
+  <!-- Headline metrics -->
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+    <div class="metric-card bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6">
+      <div class="text-sm text-gray-500 dark:text-gray-400 uppercase tracking-wide">AI Leverage</div>
+      <div class="mt-2 text-4xl font-bold text-brand-600" id="metric-leverage">—</div>
+      <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">[Defensible, capped]</div>
+    </div>
+    <div class="metric-card bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6">
+      <div class="text-sm text-gray-500 dark:text-gray-400 uppercase tracking-wide">Sessions in parallel</div>
+      <div class="mt-2 text-4xl font-bold text-brand-600" id="metric-parallelism">—</div>
+      <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">average simultaneous instances</div>
+    </div>
+    <div class="metric-card bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6">
+      <div class="text-sm text-gray-500 dark:text-gray-400 uppercase tracking-wide">Person-days equivalent</div>
+      <div class="mt-2 text-4xl font-bold text-brand-600" id="metric-days">—</div>
+      <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">at 8h/day</div>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+    <div class="metric-card bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6">
+      <div class="text-sm text-gray-500 dark:text-gray-400 uppercase tracking-wide">Real lines</div>
+      <div class="mt-2 text-3xl font-bold" id="metric-lines">—</div>
+      <div class="text-xs text-gray-500 dark:text-gray-400 mt-1" id="metric-lines-pct">[Factual]</div>
+    </div>
+    <div class="metric-card bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6">
+      <div class="text-sm text-gray-500 dark:text-gray-400 uppercase tracking-wide">Total cost</div>
+      <div class="mt-2 text-3xl font-bold" id="metric-cost">—</div>
+      <div class="text-xs text-gray-500 dark:text-gray-400 mt-1" id="metric-cost-label">[—]</div>
+    </div>
+    <div class="metric-card bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6">
+      <div class="text-sm text-gray-500 dark:text-gray-400 uppercase tracking-wide">Trust Score</div>
+      <div class="mt-2 text-3xl font-bold" id="metric-trust">—</div>
+      <div class="text-xs text-gray-500 dark:text-gray-400 mt-1" id="metric-trust-label">—</div>
+    </div>
+  </div>
+
+  <!-- Trend chart -->
+  <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6">
+    <h2 class="text-xl font-semibold mb-4">Daily active hours trend</h2>
+    <canvas id="trend-chart" height="80"></canvas>
+  </div>
+
+  <!-- Trust breakdown -->
+  <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6">
+    <h2 class="text-xl font-semibold mb-4">Trust Score by source</h2>
+    <div id="trust-bars" class="space-y-3">
+      <div class="text-gray-500 dark:text-gray-400 text-sm">Loading…</div>
+    </div>
+  </div>
+
+  <p class="text-xs text-gray-500 dark:text-gray-400 italic" id="footer-note">
+    Computed with cap_time = — min (P95 personal cadence). Wall_brut capped at 5× duration_sec per source.
+  </p>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let trendChart = null;
+
+async function fetchJSON(url) {
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.json();
+}
+
+function fmtCurrency(n) {
+  return '$' + (n || 0).toLocaleString('en-US', {maximumFractionDigits: 0});
+}
+
+function fmtInt(n) {
+  return (n || 0).toLocaleString('en-US');
+}
+
+async function loadHighlights(days) {
+  try {
+    const h = await fetchJSON(`/api/highlights?days=${days}`);
+    document.getElementById('metric-leverage').textContent = `×${h.leverage}`;
+    document.getElementById('metric-parallelism').textContent = h.parallelism;
+    document.getElementById('metric-days').textContent = h.days_equivalent;
+    document.getElementById('metric-lines').textContent = fmtInt(h.lines_real);
+    document.getElementById('metric-lines-pct').textContent = `${h.real_pct}% of raw [Factual]`;
+    document.getElementById('metric-cost').textContent = fmtCurrency(h.cost_total);
+    document.getElementById('metric-cost-label').textContent =
+      h.cost_factual_pct >= 99.5 ? '[Factual]' : `[${h.cost_factual_pct}% Factual]`;
+    document.getElementById('metric-trust').textContent = `${h.trust_base}/100`;
+    document.getElementById('metric-trust-label').textContent =
+      `base (${h.trust_label}). +${h.trust_bonus} bonuses → ${h.trust_score}/100`;
+    document.getElementById('window-label').textContent = `Last ${h.window_days} days`;
+    document.getElementById('footer-note').textContent =
+      `Computed with cap_time = ${h.threshold_min} min (P95 personal cadence). Wall_brut capped at 5× duration_sec per source.`;
+  } catch (e) {
+    console.error('Highlights error:', e);
+  }
+}
+
+async function loadTrend(days) {
+  try {
+    const data = await fetchJSON(`/api/trend?days=${days}`);
+    const isDark = document.documentElement.classList.contains('dark');
+    const gridColor = isDark ? '#374151' : '#e5e7eb';
+    const textColor = isDark ? '#d1d5db' : '#374151';
+    const ctx = document.getElementById('trend-chart').getContext('2d');
+    if (trendChart) trendChart.destroy();
+    trendChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: data.map(d => d.date),
+        datasets: [{
+          label: 'Active hours (unified)',
+          data: data.map(d => d.active_hours),
+          borderColor: '#a855f7',
+          backgroundColor: 'rgba(168, 85, 247, 0.1)',
+          tension: 0.3,
+          fill: true,
+        }, {
+          label: 'Wall clock hours',
+          data: data.map(d => d.wall_hours),
+          borderColor: '#9ca3af',
+          backgroundColor: 'transparent',
+          borderDash: [5, 5],
+          tension: 0.3,
+        }],
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { labels: { color: textColor } } },
+        scales: {
+          x: { ticks: { color: textColor }, grid: { color: gridColor } },
+          y: { ticks: { color: textColor }, grid: { color: gridColor }, beginAtZero: true },
+        },
+      },
+    });
+  } catch (e) {
+    console.error('Trend error:', e);
+  }
+}
+
+async function loadTrust(days) {
+  try {
+    const data = await fetchJSON(`/api/trust?days=${days}`);
+    const container = document.getElementById('trust-bars');
+    container.innerHTML = '';
+    data.per_source.forEach(s => {
+      const colorClass = s.score >= 90 ? 'bg-green-500'
+                        : s.score >= 70 ? 'bg-cyan-500'
+                        : s.score >= 40 ? 'bg-yellow-500'
+                        : 'bg-red-500';
+      const row = document.createElement('div');
+      row.innerHTML = `
+        <div class="flex justify-between items-center text-sm mb-1">
+          <span class="font-mono">${s.source}</span>
+          <span><span class="text-gray-500 dark:text-gray-400 text-xs mr-3">${s.event_count} events</span><span class="font-bold">${s.score}/100 · ${s.label}</span></span>
+        </div>
+        <div class="bg-gray-200 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
+          <div class="${colorClass} h-2 rounded-full" style="width: ${s.score}%"></div>
+        </div>
+      `;
+      container.appendChild(row);
+    });
+  } catch (e) {
+    console.error('Trust error:', e);
+  }
+}
+
+async function reloadData() {
+  const days = window.getWindowDays();
+  await Promise.all([loadHighlights(days), loadTrend(days), loadTrust(days)]);
+}
+
+reloadData();
+</script>
+{% endblock %}

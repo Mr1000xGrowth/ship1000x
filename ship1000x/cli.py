@@ -1802,6 +1802,26 @@ def _discover_github(owner: str) -> None:
 
 
 @cli.command()
+@click.option("--port", default=8765, type=int, help="Port to bind (default 8765)")
+@click.option("--no-open", "no_open", is_flag=True, help="Do not auto-open the browser")
+def dashboard(port: int, no_open: bool):
+    """Launch the local web dashboard (V1.2 MVP).
+
+    Opens http://localhost:<port> in your browser. Bound to localhost
+    only — never accepts external connections. Auth-free because local
+    user (your machine, your data, your eyes only).
+
+    Pages :
+      /          Overview (highlights + trend chart + Trust Score breakdown)
+      /projects  Cross-tab projects table (sortable, filterable)
+
+    Stop with Ctrl+C.
+    """
+    from ship1000x.web.app import run_server
+    run_server(DB_PATH, CONFIG_DIR, port=port, open_browser=not no_open)
+
+
+@cli.command()
 def pulse():
     """One-line daily check : your habit-forming morning command.
 
