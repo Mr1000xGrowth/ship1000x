@@ -1,0 +1,19 @@
+
+Modes compares — 2026-05-15
+(21 events humains, 2 source(s) distincte(s), machine=your-mac.local)
+
+┏━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━┳━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ Mode                  ┃ Threshold ┃ Duree ┃ Note                     ┃
+┡━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━╇━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ ACTIF HUMAIN          │           │       │                          │
+│   strict (5min)       │   5.0 min │   35m │ conservateur, hardcode   │
+│   auto P95            │  21.6 min │   54m │ applique                 │
+│   loose (15min)       │  15.0 min │   54m │ genereux                 │
+├───────────────────────┼───────────┼───────┼──────────────────────────┤
+│ AGENT IA (estime)     │           │       │                          │
+│   travail autonome IA │         — │    0m │ wall - actif humain auto │
+├───────────────────────┼───────────┼───────┼──────────────────────────┤
+│ TOTAL                 │           │       │                          │
+│   wall-clock          │         — │   54m │ premier → dernier event  │
+└───────────────────────┴───────────┴───────┴──────────────────────────┘
+Verification : actif humain auto + agent IA = wall-clock ✓

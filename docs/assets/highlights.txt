@@ -1,0 +1,23 @@
+
+╭───────────────────── 🚀 Highlights — derniers 30 jours ──────────────────────╮
+│                                                                              │
+│   Effet de levier IA           x3.0        [Defensible, capped]              │
+│   Sessions IA en parallèle     1.6         (moyenne, instances simultanées)  │
+│   Équivalent jours-homme       32 jours    (en 30 jours cal.)                │
+│                                                                              │
+│   Production réelle            607 008   lignes vrai code (92%) [Factual]    │
+│   Coût agentique               $5 396      [93% Factual  rest heuristic]     │
+│   Cost / ligne nette           $0.0082   ultra-efficient                     │
+│                                                                              │
+│   Trust Score                  96/100     base (Factual). +8 bonuses →       │
+│ 100/100                                                                      │
+│   Sources captées              7          Factual + Defensible               │
+│                                                                              │
+│   → Avec 1h de ton temps, tu génères ~3.0h d'exécution agentique             │
+│     et 2361 lignes de vrai code défendable.                                  │
+│                                                                              │
+│   Calculé avec cap_time = 21.6 min (P95 personnel)                           │
+│   Wall_brut capped at 5x duration_sec per source (anti-inflation)            │
+╰──────────────────────────────────────────────────────────────────────────────╯
+
+Pour le détail technique : ship1000x insights --since 30d

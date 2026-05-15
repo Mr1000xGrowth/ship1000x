@@ -1,0 +1,24 @@
+Calibration pour maintainer@example.com sur 14 jours...
+
+                    Profil cadence — maintainer@example.com                     
+┏━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ Percentile    ┃              Valeur ┃ Interpretation                       ┃
+┡━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ P50 (mediane) │   162 sec (2.7 min) │ moitie de tes intervalles font <= ca │
+│ P75           │   385 sec (6.4 min) │ 75% des intervalles                  │
+│ P90           │  789 sec (13.2 min) │ 90% des intervalles                  │
+│ P95           │ 1299 sec (21.6 min) │ threshold AUTO applique              │
+│ P99           │ 5509 sec (91.8 min) │ vraies pauses au-dela                │
+└───────────────┴─────────────────────┴──────────────────────────────────────┘
+
+Sample size : 1946 intervalles sur 14 jours
+Calcule a 2026-05-15T13:21:20.618618+00:00
+
+Profil : sessions tres etalees (pauses cafe naturelles incluses)
+
+  Le threshold P95 (21.6 min) sera utilise dans les modes :
+    tracker today --compare-modes
+    tracker rollup (rebuild des daily_unified)
+
+  Override possible :
+    tracker today --compare-modes (voir les 5 modes cote-a-cote)

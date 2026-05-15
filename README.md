@@ -149,6 +149,87 @@ Run `ship1000x --help` for the full list (40+ commands including
 `rollup`, `push`, `daily`, `audit`, `reclassify`, `discover`, `health`,
 `install-scheduler`).
 
+## Screenshots
+
+### `ship1000x highlights` — the showcase
+
+```
+╭───────────────────── 🚀 Highlights — derniers 30 jours ──────────────────────╮
+│                                                                              │
+│   Effet de levier IA           x3.0        [Defensible, capped]              │
+│   Sessions IA en parallèle     1.6         (moyenne, instances simultanées)  │
+│   Équivalent jours-homme       32 jours    (en 30 jours cal.)                │
+│                                                                              │
+│   Production réelle            607 008   lignes vrai code (92%) [Factual]    │
+│   Coût agentique               $5 396      [93% Factual, rest heuristic]     │
+│   Cost / ligne nette           $0.0082   ultra-efficient                     │
+│                                                                              │
+│   Trust Score                  96/100     base (Factual). +8 bonuses → 100   │
+│   Sources captées              7          Factual + Defensible               │
+│                                                                              │
+│   → Avec 1h de ton temps, tu génères ~3.0h d'exécution agentique             │
+│     et 2361 lignes de vrai code défendable.                                  │
+│                                                                              │
+│   Calculé avec cap_time = 21.6 min (P95 personnel)                           │
+│   Wall_brut capped at 5x duration_sec per source (anti-inflation)            │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+### `ship1000x today --compare-modes` — 5 active-time modes side by side
+
+```
+Modes compares — 2026-05-15
+(21 events humains, 2 source(s) distincte(s), machine=your-mac.local)
+
+┏━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━┳━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ Mode                  ┃ Threshold ┃ Duree ┃ Note                     ┃
+┡━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━╇━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ ACTIF HUMAIN          │           │       │                          │
+│   strict (5min)       │   5.0 min │   35m │ conservateur, hardcode   │
+│   auto P95            │  21.6 min │   54m │ applique                 │
+│   loose (15min)       │  15.0 min │   54m │ genereux                 │
+├───────────────────────┼───────────┼───────┼──────────────────────────┤
+│ AGENT IA (estime)     │           │       │                          │
+│   travail autonome IA │         — │    0m │ wall - actif humain auto │
+├───────────────────────┼───────────┼───────┼──────────────────────────┤
+│ TOTAL                 │           │       │                          │
+│   wall-clock          │         — │   54m │ premier → dernier event  │
+└───────────────────────┴───────────┴───────┴──────────────────────────┘
+Verification : actif humain auto + agent IA = wall-clock ✓
+```
+
+### `ship1000x calibrate` — your personal P95 cadence
+
+```
+                Profil cadence — maintainer@example.com
+┏━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ Percentile    ┃              Valeur ┃ Interpretation                       ┃
+┡━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ P50 (mediane) │   162 sec (2.7 min) │ moitie de tes intervalles font <= ca │
+│ P75           │   385 sec (6.4 min) │ 75% des intervalles                  │
+│ P90           │  789 sec (13.2 min) │ 90% des intervalles                  │
+│ P95           │ 1299 sec (21.6 min) │ threshold AUTO applique              │
+│ P99           │ 5509 sec (91.8 min) │ vraies pauses au-dela                │
+└───────────────┴─────────────────────┴──────────────────────────────────────┘
+Sample size : 1946 intervalles sur 14 jours
+Profil : sessions tres etalees (pauses cafe naturelles incluses)
+```
+
+### `ship1000x pulse` — the morning ritual (one-line check)
+
+```
+🚀 15:21 · 1.0h active · $77 · 6 commits · 2 sources active ↘ -89% vs 7d avg
+```
+
+### Web dashboard (`ship1000x dashboard`)
+
+Premium neutral design (Inter + ambre accent), localhost-only, dark mode auto.
+2 pages : Overview (highlights + trend chart + Trust Score breakdown) +
+Projects (sortable matrix). Window selector 7/14/30/60/90/180/365 days.
+
+> 📸 Screenshots coming — open `http://localhost:10000` after running
+> `ship1000x dashboard` to see live.
+
 ## Privacy & consent
 
 The first thing `ship1000x init` does is show a consent block :
