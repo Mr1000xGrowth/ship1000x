@@ -39,7 +39,6 @@ from ship1000x.insights.multiplier import compute_multiplier
 from ship1000x.insights.profile import compute_profile
 from ship1000x.insights.signals import compute_all_signals
 
-
 _SHARE_DEFAULTS: dict[str, Any] = {
     "share_email": False,
     "share_machine_id": True,

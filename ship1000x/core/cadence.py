@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
-from typing import Optional
 
 from ship1000x.core.storage import Storage
 
@@ -26,7 +25,7 @@ def compute_cadence_profile(
     storage: Storage,
     user_email: str,
     window_days: int = 14,
-) -> Optional[dict]:
+) -> dict | None:
     """Calcule le profil de cadence (percentiles des deltas) sur N jours.
 
     Lit les `event_timeline` JSON dans `events.raw_meta`, extrait les
@@ -135,7 +134,7 @@ def upsert_cadence_profile(storage: Storage, profile: dict) -> None:
         )
 
 
-def get_cadence_profile(storage: Storage, user_email: str) -> Optional[dict]:
+def get_cadence_profile(storage: Storage, user_email: str) -> dict | None:
     """Lit le dernier profil persiste pour un user. Return None si jamais calcule."""
     sql = """
         SELECT user_email, p50, p75, p90, p95, p99, sample_size, window_days, computed_at
@@ -153,7 +152,7 @@ def refresh_user_cadence(
     storage: Storage,
     user_email: str,
     window_days: int = 14,
-) -> Optional[dict]:
+) -> dict | None:
     """Calcule + persiste le profil pour un user. Util pour `tracker.py daily`.
 
     Le tracker local ne traque qu'un user (l'owner de la machine), donc

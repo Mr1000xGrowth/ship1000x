@@ -29,9 +29,8 @@ from rich.table import Table
 # Permet d'importer core/ / collectors/ depuis la racine du projet
 sys.path.insert(0, str(Path(__file__).parent))
 
-from ship1000x.core.storage import Storage
 from ship1000x.core.classifier import Classifier
-
+from ship1000x.core.storage import Storage
 
 REPO_ROOT = Path(__file__).parent
 DB_PATH = REPO_ROOT / "db" / "tracker.sqlite"
@@ -264,7 +263,7 @@ def ingest(source: str):
         )
 
     console.print()
-    console.print(f"[green]✓[/green] Ingestion terminee")
+    console.print("[green]✓[/green] Ingestion terminee")
     console.print(f"  Sessions : {total_stats['sessions_ingested']}")
     console.print(f"  Events   : {total_stats['events_ingested']}")
     if total_stats["skipped"]:
@@ -300,8 +299,8 @@ def today(compare_modes: bool):
     )
 
     if not rows:
-        console.print(f"[yellow]Aucune activite trackee aujourd'hui.[/yellow]")
-        console.print(f"  Lance [cyan]tracker ingest[/cyan] pour collecter les sessions.")
+        console.print("[yellow]Aucune activite trackee aujourd'hui.[/yellow]")
+        console.print("  Lance [cyan]tracker ingest[/cyan] pour collecter les sessions.")
         return
 
     table = Table(title=f"Aujourd'hui ({today_start.date()})", show_header=True)
@@ -343,7 +342,7 @@ def _print_compare_modes(storage: Storage, day: str) -> None:
     unified = get_daily_unified(storage, day)
     if not unified:
         console.print(f"[yellow]Aucune metrique unifiee pour {day}.[/yellow]")
-        console.print(f"  Lance [cyan]tracker rollup --since 7d[/cyan] pour recalculer.")
+        console.print("  Lance [cyan]tracker rollup --since 7d[/cyan] pour recalculer.")
         return
 
     threshold = unified["threshold_used_sec"]
@@ -396,7 +395,7 @@ def _print_compare_modes(storage: Storage, day: str) -> None:
     expected_wall = unified["active_sec_p95"] + unified["agent_sec_estimated"]
     delta = unified["wall_clock_sec"] - expected_wall
     if abs(delta) <= 1:
-        console.print(f"[green]Verification :[/green] actif humain auto + agent IA = wall-clock ✓")
+        console.print("[green]Verification :[/green] actif humain auto + agent IA = wall-clock ✓")
     else:
         console.print(f"[yellow]Verification :[/yellow] ecart {delta} sec entre somme et wall-clock")
 
@@ -434,8 +433,8 @@ def calibrate(window: int, user: str | None):
     profile = refresh_user_cadence(storage, user_email, window_days=window)
 
     if not profile:
-        console.print(f"[yellow]Pas assez de data pour calibrer[/yellow] (< 50 intervalles).")
-        console.print(f"  Lance [cyan]tracker daily[/cyan] regulierement pour accumuler.")
+        console.print("[yellow]Pas assez de data pour calibrer[/yellow] (< 50 intervalles).")
+        console.print("  Lance [cyan]tracker daily[/cyan] regulierement pour accumuler.")
         return
 
     console.print()
@@ -475,11 +474,11 @@ def calibrate(window: int, user: str | None):
 
     console.print()
     console.print(f"  Le threshold P95 ({p95_min:.1f} min) sera utilise dans les modes :")
-    console.print(f"    [cyan]tracker today --compare-modes[/cyan]")
-    console.print(f"    [cyan]tracker rollup[/cyan] (rebuild des daily_unified)")
+    console.print("    [cyan]tracker today --compare-modes[/cyan]")
+    console.print("    [cyan]tracker rollup[/cyan] (rebuild des daily_unified)")
     console.print()
-    console.print(f"  Override possible :")
-    console.print(f"    [cyan]tracker today --compare-modes[/cyan] (voir les 5 modes cote-a-cote)")
+    console.print("  Override possible :")
+    console.print("    [cyan]tracker today --compare-modes[/cyan] (voir les 5 modes cote-a-cote)")
 
 
 @cli.command()
@@ -504,7 +503,7 @@ def week():
     )
 
     if not rows:
-        console.print(f"[yellow]Aucune activite trackee sur 7 jours.[/yellow]")
+        console.print("[yellow]Aucune activite trackee sur 7 jours.[/yellow]")
         return
 
     table = Table(title=f"7 derniers jours ({week_start.date()} → aujourd'hui)", show_header=True)
@@ -815,12 +814,12 @@ def privacy():
         console.print(f"  [green]✓[/green] Consent signe : {consent.get('user_email', '?')} le {consent['signed_at'][:10]}")
         console.print(f"    Cloud sync : {'[green]oui[/green]' if consent.get('cloud_sync') else '[yellow]non[/yellow]'}")
     else:
-        console.print(f"  [yellow]⚠[/yellow]  Consent non signe. Lance [cyan]tracker init[/cyan].")
+        console.print("  [yellow]⚠[/yellow]  Consent non signe. Lance [cyan]tracker init[/cyan].")
     console.print()
 
     console.print("[bold]Partage par projet[/bold]")
     if not share:
-        console.print(f"  [yellow]Tous les projets sont en mode private par defaut[/yellow]")
+        console.print("  [yellow]Tous les projets sont en mode private par defaut[/yellow]")
     else:
         for project_id, level in share.items():
             if project_id == "_default":
@@ -836,7 +835,7 @@ def privacy():
         console.print(f"  [green]✓[/green] {cloud.get('provider', '?')} : {cloud.get('bucket', '?')}")
         console.print(f"    Push quotidien {cloud.get('push_time', '?')} UTC")
     else:
-        console.print(f"  [yellow]Push desactive[/yellow]")
+        console.print("  [yellow]Push desactive[/yellow]")
 
     console.print()
     console.print(f"Pour editer : [cyan]{PRIVACY_CONFIG}[/cyan]")
@@ -862,8 +861,8 @@ def export(since: str, output: str | None):
 @click.option("--since", default="180d", help="Fenetre recalcul rollups")
 def rollup(since: str):
     """(Re)calcule les daily_rollup agreges depuis les events."""
-    from ship1000x.core.rollup import rebuild_rollups
     from ship1000x.core.cadence import refresh_user_cadence
+    from ship1000x.core.rollup import rebuild_rollups
     storage = _get_storage()
     cutoff = _parse_since(since) or (datetime.now() - timedelta(days=180))
     stats = rebuild_rollups(storage, cutoff)
@@ -934,8 +933,8 @@ def backfill_machine_id_cmd(ctx: click.Context):
 
     console.print()
     console.print("[bold]Prochaines etapes :[/bold]")
-    console.print(f"  1. [cyan]tracker rollup[/cyan]              — recalcule les daily_rollup avec machine_id")
-    console.print(f"  2. [cyan]tracker push[/cyan]                — re-upload les rollups vers S3 (ecrase les fichiers pre-V2)")
+    console.print("  1. [cyan]tracker rollup[/cyan]              — recalcule les daily_rollup avec machine_id")
+    console.print("  2. [cyan]tracker push[/cyan]                — re-upload les rollups vers S3 (ecrase les fichiers pre-V2)")
     console.print(f"  3. Dashboard → Sync → tu verras '{current_machine}' avec les vraies heures")
 
 
@@ -1170,7 +1169,7 @@ def push(since: str | None, dry_run: bool):
 @cli.command()
 def health():
     """Scan toutes les sources IA potentielles sur la machine + statut tracker."""
-    from ship1000x.core.health import scan_sources, health_payload
+    from ship1000x.core.health import health_payload, scan_sources
     privacy_config = _load_yaml(PRIVACY_CONFIG)
     sources = scan_sources(privacy_config)
 
@@ -1234,7 +1233,8 @@ def health():
 def push_health_cmd(dry_run: bool):
     """Push le scan sante des sources vers Garage S3 (s3://<bucket>/health/<user>.json)."""
     import json
-    from ship1000x.core.health import scan_sources, health_payload
+
+    from ship1000x.core.health import health_payload, scan_sources
 
     privacy_config = _load_yaml(PRIVACY_CONFIG)
     consent = privacy_config.get("consent") or {}
@@ -1262,6 +1262,7 @@ def push_health_cmd(dry_run: bool):
 
     try:
         import os
+
         import boto3
         from botocore.config import Config
     except ImportError:
@@ -1275,6 +1276,7 @@ def push_health_cmd(dry_run: bool):
     endpoint = cloud.get("endpoint")
     region = cloud.get("region", "garage")
     import platform
+
     from ship1000x.exporters.s3_push import _slugify
     machine_id = platform.node()
     user_slug = user_email.replace("@", "-at-").replace(".", "-")
@@ -1426,6 +1428,7 @@ def delete(confirm: bool, keep_cloud: bool):
         if user_email and bucket and endpoint:
             try:
                 import os
+
                 import boto3
                 from botocore.config import Config
                 os.environ.setdefault("AWS_REQUEST_CHECKSUM_CALCULATION", "when_required")
@@ -1467,7 +1470,7 @@ def status():
     )
     last_ts = last[0]["last"] if last else None
 
-    console.print(f"[bold]Ship1000x[/bold]")
+    console.print("[bold]Ship1000x[/bold]")
     console.print(f"  DB path         : {DB_PATH}")
     console.print(f"  DB size         : {db_size_mb:.2f} MB")
     console.print(f"  Events          : {total_events:,}")
@@ -1514,7 +1517,7 @@ def _parse_since_days(since: str) -> int:
 @click.option("--project", default=None, help="Filtre par project_id (optionnel)")
 def insights(since: str, project: str | None):
     """Vue synthetique : overview + ratios + multiplicateur + signaux."""
-    from ship1000x.insights.engine import make_window, compute_overview
+    from ship1000x.insights.engine import compute_overview, make_window
     from ship1000x.insights.multiplier import compute_multiplier
     from ship1000x.insights.signals import compute_all_signals
 
@@ -1631,7 +1634,7 @@ def insights(since: str, project: str | None):
 @click.option("--project", default=None)
 def ratios(since: str, project: str | None):
     """Focus ratios efficience detailles."""
-    from ship1000x.insights.engine import make_window, compute_overview
+    from ship1000x.insights.engine import compute_overview, make_window
     days = _parse_since_days(since)
     window = make_window(since_days=days, project=project)
     storage = _get_storage()
@@ -1681,7 +1684,7 @@ def multiplier(since: str, project: str | None, tjm: float | None, value: float 
     console.print()
     console.print(f"[bold cyan]═══ Multiplicateur IA-native {project or 'global'} | {since} ═══[/bold cyan]")
     console.print()
-    console.print(f"[bold]Production[/bold]")
+    console.print("[bold]Production[/bold]")
     console.print(f"  Output reel      : {out['lines_per_hour']} lignes/h")
     console.print(f"  Benchmark senior : {out['benchmark_senior_low']}-{out['benchmark_senior_high']} lignes/h (sans IA)")
     console.print(f"  Facteur          : [cyan]x{out['factor_vs_senior_low']} → x{out['factor_vs_senior_high']}[/cyan] "
@@ -1695,7 +1698,7 @@ def multiplier(since: str, project: str | None, tjm: float | None, value: float 
         console.print(f"  Ratio v/t        : [cyan]x{v['value_time_ratio']}[/cyan] "
                       f"(valeur produit / cout-temps senior)")
     console.print()
-    console.print(f"[bold]Cout IA (LLM)[/bold]")
+    console.print("[bold]Cout IA (LLM)[/bold]")
     console.print(f"  Total            : ${c['total_usd']}")
     console.print(f"  Par heure        : ${c['per_hour_usd'] or 0:.2f}/h")
     console.print(f"  Par commit       : ${c['per_commit_usd'] or 0:.2f}")
@@ -1785,7 +1788,7 @@ def profile(since: str, project: str | None):
     if (s["mono"] + s["multi"]) > 0:
         mono_pct = s["mono"] / (s["mono"] + s["multi"]) * 100
         console.print(f"[bold]Journees mono-tache[/bold] : {s['mono']}/{s['mono']+s['multi']} ({mono_pct:.0f}%)")
-        console.print(f"  (un projet > 70% du temps du jour)")
+        console.print("  (un projet > 70% du temps du jour)")
         console.print()
 
     # Wordcount
@@ -1805,8 +1808,8 @@ def profile(since: str, project: str | None):
 @click.option("--dry-run", is_flag=True)
 def push_insights_cmd(since: str, tjm: float | None, value: float | None, dry_run: bool):
     """Compute insights and push JSON to Garage S3 (advanced — for optional cloud sync)."""
-    from ship1000x.insights.engine import make_window
     from ship1000x.exporters.insights_push import build_insights_payload, push_insights_to_s3
+    from ship1000x.insights.engine import make_window
 
     privacy_config = _load_yaml(PRIVACY_CONFIG)
     consent = privacy_config.get("consent") or {}
@@ -2073,7 +2076,7 @@ def audit(since: str):
     if gaps:
         console.print(f"[yellow]⚠ {len(gaps)} gaps detectes[/yellow] "
                       f"({gap_commits} commits sans session IA associee)")
-        console.print(f"  -> possibles sources non-tracees (autre Mac, outil IA non connecte, classifier rate)")
+        console.print("  -> possibles sources non-tracees (autre Mac, outil IA non connecte, classifier rate)")
         console.print()
         table = Table(title="Gaps : jours/projets avec commits mais 0h active", show_lines=False)
         table.add_column("Date")
@@ -2171,8 +2174,9 @@ def discover(save: bool):
     Avec --save, ajoute les paths trouves a privacy.yaml → pris en compte
     au prochain `tracker ingest`.
     """
-    from ship1000x.core.discovery import discover_paths
     import yaml as _yaml
+
+    from ship1000x.core.discovery import discover_paths
 
     console.print("[bold cyan]═══ Discovery ═══[/bold cyan]")
     console.print(f"Scan de [cyan]{Path.home()}[/cyan] (max depth 4)...")
@@ -2225,9 +2229,14 @@ def doctor(fix: bool):
     Avec --fix : applique les corrections automatiques (migration yaml silencieuse,
     prompt interactif pour credentials S3 manquants, ecriture dans ~/.aws/credentials).
     """
-    from ship1000x.core.health import scan_sources
-    from ship1000x.core.config_migration import run_auto_migration, check_aws_credentials, write_aws_credentials
     import os
+
+    from ship1000x.core.config_migration import (
+        check_aws_credentials,
+        run_auto_migration,
+        write_aws_credentials,
+    )
+    from ship1000x.core.health import scan_sources
 
     # Étape 0 — Migration auto silencieuse si --fix
     if fix and PRIVACY_CONFIG.exists():
@@ -2251,11 +2260,12 @@ def doctor(fix: bool):
     if fix and cloud.get("push_enabled"):
         creds_info = check_aws_credentials()
         if not creds_info["found"]:
-            from rich.prompt import Prompt, Confirm
+            from rich.prompt import Confirm, Prompt
+
             from ship1000x.core.config_migration import (
+                format_secret_preview,
                 validate_aws_access_key,
                 validate_aws_secret,
-                format_secret_preview,
             )
 
             def _print_fallback():
@@ -2401,7 +2411,8 @@ def doctor(fix: bool):
 
     # 4. Coverage 7j
     storage = _get_storage()
-    from datetime import datetime as _dt, timedelta as _td
+    from datetime import datetime as _dt
+    from datetime import timedelta as _td
     cutoff_7 = (_dt.utcnow() - _td(days=7)).isoformat()
     with storage.conn() as c:
         r = c.execute("""

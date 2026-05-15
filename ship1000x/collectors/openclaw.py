@@ -264,7 +264,7 @@ def collect(
         auth_mode="via_openclaw_gateway"
       - project_id classifie via cwd + agent_name
     """
-    from ship1000x.core.privacy import sanitize_event, is_excluded_path
+    from ship1000x.core.privacy import is_excluded_path, sanitize_event
 
     stats = {
         "files_seen": 0,
@@ -344,8 +344,6 @@ def collect(
             timeline = _build_event_timeline(
                 d["user_events"], d["assistant_events"], d["tool_results"]
             )
-            total_user_msgs = sum(d["user_msg_counts"].values())
-
             for project_id, ratio in distribution.items():
                 event = {
                     "id": _stable_event_id(parsed["session_id"], day_key, project_id),

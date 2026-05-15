@@ -13,10 +13,7 @@ its own confidence rather than presenting all numbers as equally reliable.
 
 from __future__ import annotations
 
-from typing import Optional
-
 from ship1000x.core.storage import Storage
-
 
 CONFIDENCE_WEIGHTS = {"high": 100, "medium": 70, "low": 40}
 
@@ -80,7 +77,7 @@ def get_all_source_scores(
 def compute_global_score(
     storage: Storage,
     window_days: int = 30,
-    user_email: Optional[str] = None,
+    user_email: str | None = None,
 ) -> dict:
     """Composite global score with bonuses and penalties.
 
