@@ -277,6 +277,116 @@ See [PRIVACY.md](PRIVACY.md) for details. Summary:
 
 ---
 
+## 6.bis Anti-inflation cap on wall_clock per source
+
+### The problem
+
+Some sources record `wall_clock_sec` as `last_event_ts - first_event_ts` of
+a session. For sources that capture few discrete events (e.g. Codex MacApp
+records only "turns" — 3-5 user prompts per session), the wall_clock can
+grossly overestimate actual presence. A real example from a production DB :
+
+```
+codex_macapp source over 60 days :
+  duration_sec (active typed) :  29h    [73 events captured]
+  wall_clock_sec              : 560h    [first→last event timespan]
+  ratio wall/active           : 19.2×   [absurd : implies the user was
+                                          "present" 19h for every 1h typed]
+```
+
+This 560h is partially false : the macApp stays open in the background, but
+the user is not actively present. Without correction, the "leverage
+multiplier" headline metric becomes meaningless.
+
+### The cap rule
+
+In `tracker highlights`, when computing the leverage multiplier
+(`wall_brut / active_h`), we cap each source's `wall_clock_sec` at
+`5 × duration_sec` :
+
+```python
+wall_brut_capped = sum(min(wall, duration * 5) for source in events)
+```
+
+### Why × 5 and not × 3 or × 10 ?
+
+The `5×` choice comes from observed real ratios across sources :
+- `claude_code` : ~2.7× (Claude Code captures many events per session,
+  so ratio is honest)
+- `codex_desktop` : ~1.4× (also captures well)
+- `codex` (CLI) : ~7.3× (captures less)
+- `codex_macapp` : ~19× (captures only turns, very sparse)
+
+A cap at `5×` :
+- Preserves honest ratios (claude_code, codex_desktop unchanged)
+- Cuts the inflation from sparse-capture sources
+- Gives roughly the median real ratio when normalizing all sources
+
+A cap at `3×` would be too aggressive (would penalize sources with
+genuinely deep agentic sessions). A cap at `10×` would not solve the
+codex_macapp inflation. The `5×` is the empirically defensible compromise.
+
+### What this changes in your reports
+
+- `tracker highlights` displays the capped multiplier (defensible WOW number)
+- `tracker insights` displays both the raw and the unified-source multiplier
+- The cap is documented in the highlights footer :
+  `Wall_brut capped at 5x duration_sec per source (anti-inflation)`
+
+### How to verify the impact
+
+```bash
+# Sources with wall/duration > 5× (will be capped) :
+sqlite3 ~/.local/share/ship1000x/tracker.sqlite "
+  SELECT source,
+    SUM(duration_sec) AS dur,
+    SUM(wall_clock_sec) AS wall,
+    ROUND(CAST(SUM(wall_clock_sec) AS REAL) / NULLIF(SUM(duration_sec), 0), 1) AS ratio
+  FROM events WHERE source != 'git'
+  GROUP BY source HAVING ratio > 5;
+"
+```
+
+---
+
+## 6.ter Cap per session : `MAX_ACTIVE_SEC_PER_SESSION`
+
+Each collector caps its individual session active time at
+`SHIP1000X_MAX_SESSION_HOURS` hours (default : **16h**). Override via env var :
+
+```bash
+export SHIP1000X_MAX_SESSION_HOURS=24   # for hardcore power users
+```
+
+### Why a cap at all ?
+
+To protect against rare aberrations where a session log file remains
+"open" (no end timestamp) for days, leading to a single event with
+duration_sec = 5+ days. Without this cap, one corrupt session can
+silently dominate a month of stats.
+
+### Why 16h default (was 12h before v0.2.0) ?
+
+Empirically observed power users do hit 14h+ days regularly (verified
+on real data : maintainer's sessions reach 13-14h on intensive days).
+Capping at 12h was silently truncating those days. Moving to 16h
+preserves intensive-but-real days while still catching aberrations
+(>16h continuous active in one source is structurally impossible).
+
+### How to monitor cap impact
+
+```bash
+# Count events that hit exactly the cap value (= probably truncated) :
+sqlite3 ~/.local/share/ship1000x/tracker.sqlite "
+  SELECT source, COUNT(*) AS n_capped FROM events
+  WHERE duration_sec = ${SHIP1000X_MAX_SESSION_HOURS:-16} * 3600
+  GROUP BY source;
+"
+# Should be < 0.1% of total events. If higher, raise the cap.
+```
+
+---
+
 ## 7. Explicit methodological choices
 
 ### What we CHOSE NOT to do

@@ -28,7 +28,11 @@ VOICE_DICTATION_WORDCOUNT = 200
 # Garde-fou : aucun humain ne peut maintenir > 12h d'activite continue
 # sur une meme session. Au-dela, on cap pour eviter les aberrations des
 # sessions laissees ouvertes plusieurs jours.
-MAX_ACTIVE_SEC_PER_SESSION = 12 * 3600
+import os as _os_max  # noqa
+# Cap per session : protects against 'app left open' aberrations.
+# Override via env var SHIP1000X_MAX_SESSION_HOURS for power users
+# who genuinely run intensive multi-session days (>16h is rare but possible).
+MAX_ACTIVE_SEC_PER_SESSION = int(_os_max.environ.get('SHIP1000X_MAX_SESSION_HOURS', '16')) * 3600
 
 # Cost estimates deleguees a core.pricing (source de verite partagee avec
 # codex.py). Tarifs API officiels Anthropic, mis a jour 2026-04-21.

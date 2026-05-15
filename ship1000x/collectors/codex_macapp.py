@@ -39,7 +39,11 @@ CODEX_LOGS_DIR = Path.home() / "Library" / "Logs" / "com.openai.codex"
 # Meme regle que claude_code.py / codex_desktop.py
 ACTIVE_PAUSE_THRESHOLD_SEC = 5 * 60
 SEGMENT_GAP_SEC = 30 * 60
-MAX_ACTIVE_SEC_PER_SESSION = 12 * 3600
+import os as _os_max  # noqa
+# Cap per session : protects against 'app left open' aberrations.
+# Override via env var SHIP1000X_MAX_SESSION_HOURS for power users
+# who genuinely run intensive multi-session days (>16h is rare but possible).
+MAX_ACTIVE_SEC_PER_SESSION = int(_os_max.environ.get('SHIP1000X_MAX_SESSION_HOURS', '16')) * 3600
 
 # Parse timestamp ISO 8601 en debut de ligne : "2026-04-19T00:12:17.023Z"
 _TS_RE = re.compile(r"^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z)")
