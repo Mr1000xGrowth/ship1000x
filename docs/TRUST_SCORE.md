@@ -98,22 +98,51 @@ score(lines_per_hour) = min(
 
 ## Composite global score
 
-The global Ship1000x score for a user is a weighted aggregation:
+The global Ship1000x score is the **raw weighted average** of per-source confidence:
 
 ```
-global_score = (
-    score(claude_code)        * weight_by_event_count
-    + score(codex)            * weight_by_event_count
-    + score(git_multi)        * weight_by_event_count
-    + ... 
-    + bonus(reconciliation_passed)        # +5 if Anthropic Admin API matches ±15%
-    + bonus(cadence_calibrated)           # +3 if user has run `tracker calibrate`
-    + bonus(daily_unified_populated)      # +5 if cross-source merge active
-    - penalty(missing_critical_source)    # -10 if claude_code or git missing
-)
+global_score = Σ (score(source) × event_count(source)) / Σ event_count(source)
 ```
 
-Capped at 100.
+**No additive bonuses. No silent cap.** What you see is the raw quality of
+the underlying data — capped at 100 only because individual source scores
+are themselves bounded to [0, 100].
+
+### Why no additive bonuses
+
+Earlier versions added points for "cadence calibrated" (+3), "daily unified
+populated" (+5), and subtracted for "critical source missing" (-10). The
+final score was then `min(100, base + bonuses - penalties)`. This had two
+problems:
+
+1. **Silent cap inflation.** A base of 96 + 8 bonuses showed as 100/100,
+   visually identical to a true 100/100 — the cap absorbed the difference
+   without telling the reader.
+2. **Mixing apples and oranges.** A weighted-average score (continuous,
+   measures data quality) and a binary check (cadence YES/NO, measures
+   setup robustness) are different things — adding them implies they
+   exchange linearly, which they don't.
+
+The current design separates the two: **score** is data quality;
+**robustness checks** are independent qualitative signals.
+
+### Robustness checks (independent, not additive)
+
+Reported alongside the score, these are independent signals about whether
+the measurement setup is solid enough to trust the score. They never alter
+the number.
+
+| Check | Passes when | What it tells you |
+|---|---|---|
+| Cadence calibrated | User has a personal P95 cadence profile (sample ≥ 100) | Active-time threshold uses YOUR rhythm, not a hardcoded default |
+| Cross-source unified | `daily_unified` table has rows in the window | Multi-agent overcount has been deduped (see METHODOLOGY.md §6) |
+| Critical sources present | `claude_code` AND `git` both have events | The two highest-confidence inputs are feeding the score |
+
+A high score (95+) **with one or more failing checks** means the data you
+have is high quality, but the setup is incomplete — recommend running the
+suggested fix before quoting the score externally.
+
+A high score **with all checks passing** is audit-ready.
 
 ### Interpretation
 
@@ -176,8 +205,9 @@ Already implemented. Shows the user's cadence profile + classification. The cali
 | `git` score < 80 | Many files unclassified by line_classifier | Review `~/.config/ship1000x/line_classifier.yaml` patterns |
 | `codex_macapp` score = 70 | Cost via heuristic (tokens=0 by design) | Cross-check with `openai_usage` for validation |
 | Reconciliation = ±20% gap | Workspaces missing or pricing outdated | Check `core/pricing.py` is current; check Admin API key has access to all workspaces |
-| `cadence_calibrated` bonus missing | Profile not yet computed | `tracker calibrate` |
-| `daily_unified_populated` missing | Rollups not rebuilt post-V1 | `tracker rollup --since 60d` |
+| Robustness check "Cadence calibrated" failing | Profile not yet computed | `ship1000x calibrate` |
+| Robustness check "Cross-source unified" failing | Rollups not rebuilt | `ship1000x rollup --since 60d` |
+| Robustness check "Critical sources present" failing | `claude_code` or `git` events not ingested in window | `ship1000x ingest` then re-run / extend the window |
 
 ---
 

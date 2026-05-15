@@ -5,6 +5,49 @@ All notable changes to Ship1000x are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] — 2026-05-15 — Trust Score honesty fix (breaking API)
+
+### Changed — Trust Score is now the raw weighted average per source
+- **No additive bonuses, no silent cap.** Previously the global score was
+  computed as `min(100, base + bonuses - penalties)`, which meant a base
+  of 96 + 8 bonuses showed as 100/100 — visually identical to a true
+  100/100, with the cap absorbing the inflation invisibly. This is exactly
+  the kind of opaque metric Ship1000x is supposed to denounce.
+- **New shape :** `compute_global_score()` returns
+  `{score, label, breakdown, robustness_checks}`. The `score` is the raw
+  weighted-average of per-source confidence (data quality). The
+  `robustness_checks` list reports independent qualitative signals about
+  the measurement setup — they NEVER alter the score.
+- **3 robustness checks reported :**
+  - *Cadence calibrated* : user has a personal P95 profile (sample ≥ 100)
+  - *Cross-source unified* : `daily_unified` populated (multi-agent dedup)
+  - *Critical sources present* : `claude_code` AND `git` both have events
+
+### Breaking — JSON API + dict shape
+- `/api/highlights` : removed `trust_base`, `trust_bonus`. Added
+  `trust_robustness` (list of `{name, passed, detail}`).
+- `compute_global_score()` return dict : removed `base`, `bonus`, `penalty`,
+  `bonus_reasons`, `penalty_reasons`. Added `robustness_checks`.
+
+### Updated — UI surfaces
+- **Web dashboard `overview.html`** : Trust card simplified to `score/100 ·
+  label`. New "Robustness checks" section below with ✓/✗ icons.
+- **CLI `highlights`** : Trust line shows `score/100 · label · weighted avg
+  per source (raw)` then a "Robustness checks" sub-block.
+- **CLI `insights`** : same — robustness checks replace the old
+  base+bonuses breakdown.
+
+### Documentation
+- `docs/TRUST_SCORE.md` : composite section rewritten with explicit
+  rationale for dropping additive bonuses (the 96+8=100 incident).
+
+### Tests
+- `tests/test_trust_score.py` : 9 new tests on `robustness_checks`,
+  removed asserts on `bonus`/`penalty`/`base`. Added test verifying score
+  is the raw weighted average (never capped, never inflated).
+- `tests/test_dashboard_smoke.py` : asserts `trust_robustness` shape.
+- Total : 130 tests pass.
+
 ## [0.4.0] — 2026-05-15 — Local web dashboard MVP
 
 ### Added

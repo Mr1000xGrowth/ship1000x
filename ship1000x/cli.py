@@ -1981,11 +1981,10 @@ def highlights(since: str):
     cost_per_line = (cost_factual / lines_real) if lines_real else 0  # use factual cost only
     real_pct = (lines_real / lines_raw * 100) if lines_raw else 0
 
-    # Trust Score (honest : show base + bonuses, not just final)
+    # Trust Score (raw weighted-average per source, no math hack)
     from ship1000x.insights.trust_score import compute_global_score
     trust = compute_global_score(storage, window_days=days, user_email=user_email)
-    trust_base = trust.get("base", trust["score"])
-    trust_bonus = trust.get("bonus", 0)
+    trust_checks = trust.get("robustness_checks", [])
 
     # Confidence labels per metric (Factual/Defensible/Indicative)
     cf_lines = "[Factual]"  # git lines = ground truth
@@ -2006,8 +2005,14 @@ def highlights(since: str):
     lines.append(f"  [bold green]Coût agentique[/bold green]               [bold cyan]${cost:,.0f}[/bold cyan]      [dim]{cf_cost}[/dim]".replace(",", " "))
     lines.append(f"  [bold green]Cost / ligne nette[/bold green]           [bold cyan]${cost_per_line:.4f}[/bold cyan]   [dim]ultra-efficient[/dim]")
     lines.append("")
-    lines.append(f"  [bold yellow]Trust Score[/bold yellow]                  [bold cyan]{trust_base}/100[/bold cyan]     [dim]base (Factual). +{trust_bonus} bonuses → {trust['score']}/100[/dim]")
+    lines.append(f"  [bold yellow]Trust Score[/bold yellow]                  [bold cyan]{trust['score']}/100[/bold cyan]     [dim]{trust['label']} · weighted avg per source (raw)[/dim]")
     lines.append(f"  [bold yellow]Sources captées[/bold yellow]              [bold cyan]{sources_count}[/bold cyan]          [dim]Factual + Defensible[/dim]")
+    if trust_checks:
+        lines.append("")
+        lines.append("  [bold yellow]Robustness checks[/bold yellow]")
+        for chk in trust_checks:
+            mark = "[green]✓[/green]" if chk["passed"] else "[red]✗[/red]"
+            lines.append(f"    {mark} {chk['name']}  [dim]{chk['detail']}[/dim]")
     lines.append("")
     lines.append(f"  [dim]→ Avec 1h de ton temps, tu génères ~{levier:.1f}h d'exécution agentique[/dim]")
     lines.append(f"  [dim]  et {lines_per_hour:.0f} lignes de vrai code défendable.[/dim]")
@@ -2130,13 +2135,14 @@ def insights(since: str, project: str | None):
         )
         console.print(ts_table)
 
-        # Bonus / penalty breakdown si pertinent
-        details: list[str] = []
-        details.extend(global_score["bonus_reasons"])
-        details.extend(global_score["penalty_reasons"])
-        if details:
-            console.print(f"  [dim]composite: base {global_score['base']} "
-                          f"{' '.join(details)}[/dim]")
+        # Robustness checks (independent qualitative signals, not additive)
+        checks = global_score.get("robustness_checks", [])
+        if checks:
+            console.print()
+            console.print("  [bold]Robustness checks[/bold]  [dim](independent setup signals — do not alter the score)[/dim]")
+            for chk in checks:
+                mark = "[green]✓[/green]" if chk["passed"] else "[red]✗[/red]"
+                console.print(f"    {mark} {chk['name']}  [dim]{chk['detail']}[/dim]")
         console.print()
 
 

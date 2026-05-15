@@ -61,6 +61,19 @@
     </div>
   </section>
 
+  <!-- Robustness checks (independent qualitative signals, NOT additive to Trust) -->
+  <section class="space-y-4">
+    <div class="flex items-baseline justify-between">
+      <h2 class="font-display text-2xl tracking-tight">Robustness checks</h2>
+      <span class="text-xs text-stone italic">independent setup signals — do not alter the score</span>
+    </div>
+    <div class="bg-paper dark:bg-graphite border border-mist dark:border-slate rounded-lg p-6">
+      <div id="robustness-list" class="space-y-3">
+        <div class="text-stone text-sm">Loading…</div>
+      </div>
+    </div>
+  </section>
+
   <!-- Trend chart -->
   <section class="space-y-4">
     <div class="flex items-baseline justify-between">
@@ -116,15 +129,42 @@ async function loadHighlights(days) {
     document.getElementById('metric-cost').textContent = fmtCurrency(h.cost_total);
     document.getElementById('metric-cost-label').textContent =
       h.cost_factual_pct >= 99.5 ? 'Factual' : `${h.cost_factual_pct}% Factual, rest heuristic`;
-    document.getElementById('metric-trust').textContent = `${h.trust_base}/100`;
+    document.getElementById('metric-trust').textContent = `${h.trust_score}/100`;
     document.getElementById('metric-trust-label').textContent =
-      `base (${h.trust_label}) · +${h.trust_bonus} bonuses → ${h.trust_score}/100`;
+      `${h.trust_label} · weighted average per source (raw)`;
     document.getElementById('window-label').textContent = `Last ${h.window_days} days`;
     document.getElementById('footer-note').textContent =
       `Computed with cap_time = ${h.threshold_min} min · P95 personal cadence · wall_brut capped 5× duration_sec per source`;
+    renderRobustness(h.trust_robustness || []);
   } catch (e) {
     console.error('Highlights error:', e);
   }
+}
+
+function renderRobustness(checks) {
+  const container = document.getElementById('robustness-list');
+  if (!container) return;
+  if (!checks.length) {
+    container.innerHTML = '<div class="text-stone text-sm italic">No checks available.</div>';
+    return;
+  }
+  container.innerHTML = '';
+  checks.forEach(c => {
+    const iconColor = c.passed ? 'text-sage' : 'text-clay';
+    const icon = c.passed
+      ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>'
+      : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+    const row = document.createElement('div');
+    row.className = 'flex items-start gap-3 text-sm';
+    row.innerHTML = `
+      <span class="${iconColor} mt-0.5 flex-shrink-0">${icon}</span>
+      <div class="flex-1 min-w-0">
+        <div class="font-medium text-ink dark:text-paper">${c.name}</div>
+        <div class="text-xs text-stone italic mt-0.5">${c.detail}</div>
+      </div>
+    `;
+    container.appendChild(row);
+  });
 }
 
 async function loadTrend(days) {
