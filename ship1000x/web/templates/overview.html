@@ -10,34 +10,148 @@
     <p class="text-stone text-sm" id="window-label">Last 30 days</p>
   </header>
 
-  <!-- Headline metrics : 3 + 3 grid -->
+  <!-- Pedagogical banner : what this dashboard measures -->
+  <section class="border-l-2 border-ambre-500 pl-5 py-2">
+    <div class="text-[11px] uppercase tracking-[0.2em] text-stone font-medium mb-1">What this measures</div>
+    <p class="text-sm text-ink dark:text-paper">
+      Ship1000x reports <span class="font-medium">three distinct ratios</span> of AI leverage —
+      most dashboards mix them silently. Here they're separated, with their confidence label.
+    </p>
+  </section>
+
+  <!-- ENGAGEMENT -->
   <section class="space-y-4">
-    <div class="text-[11px] uppercase tracking-[0.2em] text-stone font-medium">Leverage</div>
+    <div class="flex items-baseline justify-between">
+      <div class="text-[11px] uppercase tracking-[0.2em] text-stone font-medium">Engagement</div>
+      <span class="text-[10px] uppercase tracking-[0.2em] text-sage font-medium">Factual</span>
+    </div>
     <div class="grid grid-cols-1 sm:grid-cols-3 gap-px bg-mist dark:bg-slate border border-mist dark:border-slate rounded-lg overflow-hidden">
 
       <div class="metric-card bg-paper dark:bg-graphite p-7">
-        <div class="text-[11px] uppercase tracking-[0.15em] text-stone font-medium">AI Leverage</div>
-        <div class="mt-3 font-display text-5xl text-ink dark:text-paper font-numeric" id="metric-leverage">—</div>
-        <div class="text-[11px] text-stone mt-2 italic">Defensible · capped 5×</div>
+        <div class="text-[11px] uppercase tracking-[0.15em] text-stone font-medium">Your active time</div>
+        <div class="mt-3 font-display text-4xl text-ink dark:text-paper font-numeric" id="metric-active">—</div>
+        <div class="text-[11px] text-stone mt-2 italic">P95 personal cadence</div>
       </div>
 
       <div class="metric-card bg-paper dark:bg-graphite p-7">
-        <div class="text-[11px] uppercase tracking-[0.15em] text-stone font-medium">Sessions / parallel</div>
-        <div class="mt-3 font-display text-5xl text-ink dark:text-paper font-numeric" id="metric-parallelism">—</div>
-        <div class="text-[11px] text-stone mt-2 italic">average simultaneous</div>
+        <div class="text-[11px] uppercase tracking-[0.15em] text-stone font-medium">Wall calendar</div>
+        <div class="mt-3 font-display text-4xl text-ink dark:text-paper font-numeric" id="metric-wall">—</div>
+        <div class="text-[11px] text-stone mt-2 italic">first → last event, raw</div>
       </div>
 
       <div class="metric-card bg-paper dark:bg-graphite p-7">
         <div class="text-[11px] uppercase tracking-[0.15em] text-stone font-medium">Person-days equiv.</div>
-        <div class="mt-3 font-display text-5xl text-ink dark:text-paper font-numeric" id="metric-days">—</div>
-        <div class="text-[11px] text-stone mt-2 italic">at 8h / day</div>
+        <div class="mt-3 font-display text-4xl text-ink dark:text-paper font-numeric" id="metric-days">—</div>
+        <div class="text-[11px] text-stone mt-2 italic">your active / 8h</div>
       </div>
 
     </div>
   </section>
 
+  <!-- R1 — TIME LEVERAGE -->
   <section class="space-y-4">
-    <div class="text-[11px] uppercase tracking-[0.2em] text-stone font-medium">Output &amp; cost</div>
+    <div class="flex items-baseline justify-between">
+      <div>
+        <div class="text-[11px] uppercase tracking-[0.2em] text-stone font-medium">R1 · Time leverage</div>
+        <div class="text-xs text-stone mt-1">Cumulated work hours per hour of YOUR active time</div>
+      </div>
+      <span class="text-[10px] uppercase tracking-[0.2em] text-sage font-medium">Measured · Factual</span>
+    </div>
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-px bg-mist dark:bg-slate border border-mist dark:border-slate rounded-lg overflow-hidden">
+
+      <div class="metric-card bg-paper dark:bg-graphite p-7">
+        <div class="text-[11px] uppercase tracking-[0.15em] text-stone font-medium">Time leverage</div>
+        <div class="mt-3 font-display text-5xl text-ink dark:text-paper font-numeric" id="metric-leverage">—</div>
+        <div class="text-[11px] text-stone mt-2 italic">capped 5× per source · anti-inflation</div>
+      </div>
+
+      <div class="metric-card bg-paper dark:bg-graphite p-7">
+        <div class="text-[11px] uppercase tracking-[0.15em] text-stone font-medium">Parallel agents</div>
+        <div class="mt-3 font-display text-5xl text-ink dark:text-paper font-numeric" id="metric-parallelism">—</div>
+        <div class="text-[11px] text-stone mt-2 italic">avg simultaneous IA sessions</div>
+      </div>
+
+    </div>
+    <p class="text-xs text-stone italic pl-1">
+      ℹ For each hour you're active, this much total work happens (you + agents running in parallel).
+    </p>
+  </section>
+
+  <!-- R2 — AGENT EFFICIENCY -->
+  <section class="space-y-4">
+    <div class="flex items-baseline justify-between">
+      <div>
+        <div class="text-[11px] uppercase tracking-[0.2em] text-stone font-medium">R2 · Agent efficiency</div>
+        <div class="text-xs text-stone mt-1">How fast an IA agent is vs a human on the same task</div>
+      </div>
+      <span class="text-[10px] uppercase tracking-[0.2em] text-clay font-medium">Indicative · per-task</span>
+    </div>
+    <div class="bg-paper dark:bg-graphite border border-mist dark:border-slate rounded-lg p-7">
+      <div class="font-display text-3xl text-ink dark:text-paper font-numeric">10× — 50×</div>
+      <div class="text-xs text-stone mt-3 leading-relaxed">
+        <span class="font-medium">refactor ~30×</span> · <span class="font-medium">boilerplate ~50×</span> · <span class="font-medium">debug ~5×</span>
+        <br/>
+        <span class="italic">Not measured directly by Ship1000x — task-dependent.
+        See <a href="https://github.com/Mr1000xGrowth/ship1000x/blob/main/docs/METHODOLOGY.md" class="hover:text-ambre-500 transition underline">METHODOLOGY.md</a>.</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- R3 — PROJECT OUTPUT -->
+  <section class="space-y-4">
+    <div class="flex items-baseline justify-between">
+      <div>
+        <div class="text-[11px] uppercase tracking-[0.2em] text-stone font-medium">R3 · Project output vs human team</div>
+        <div class="text-xs text-stone mt-1">What you produced vs an equivalent human team's effort</div>
+      </div>
+      <span class="text-[10px] uppercase tracking-[0.2em] text-clay font-medium">Estimative · your input</span>
+    </div>
+
+    <div class="bg-paper dark:bg-graphite border border-mist dark:border-slate rounded-lg p-7 space-y-5">
+      <div>
+        <label for="r3-project" class="text-[11px] uppercase tracking-[0.15em] text-stone font-medium">Project</label>
+        <select id="r3-project" class="mt-2 w-full bg-paper dark:bg-graphite border border-mist dark:border-slate rounded-md px-3 py-2 text-sm text-ink dark:text-paper">
+          <option value="">Loading…</option>
+        </select>
+        <div id="r3-project-stats" class="mt-2 text-xs text-stone font-mono">—</div>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label for="r3-people" class="text-[11px] uppercase tracking-[0.15em] text-stone font-medium">Equivalent team — people</label>
+          <input type="number" min="1" max="100" step="1" id="r3-people" value="10"
+                 class="mt-2 w-full bg-paper dark:bg-graphite border border-mist dark:border-slate rounded-md px-3 py-2 text-sm text-ink dark:text-paper font-numeric"/>
+        </div>
+        <div>
+          <label for="r3-months" class="text-[11px] uppercase tracking-[0.15em] text-stone font-medium">Calendar months</label>
+          <input type="number" min="0.5" max="60" step="0.5" id="r3-months" value="5"
+                 class="mt-2 w-full bg-paper dark:bg-graphite border border-mist dark:border-slate rounded-md px-3 py-2 text-sm text-ink dark:text-paper font-numeric"/>
+        </div>
+      </div>
+
+      <div class="border-t border-mist dark:border-slate pt-5">
+        <div class="flex items-baseline justify-between gap-6">
+          <div>
+            <div class="text-[11px] uppercase tracking-[0.15em] text-stone font-medium">R3 leverage</div>
+            <div class="mt-2 font-display text-5xl text-ink dark:text-paper font-numeric" id="r3-leverage">—</div>
+            <div class="text-[11px] text-stone mt-2 italic" id="r3-formula">—</div>
+          </div>
+          <div class="text-right text-[11px] text-stone italic max-w-xs">
+            ℹ Self-reported. Ship1000x cannot estimate this for you —
+            only YOU know your project's true scope.
+            <br/>Persisted locally per project.
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- COST · OUTPUT · TRUST -->
+  <section class="space-y-4">
+    <div class="flex items-baseline justify-between">
+      <div class="text-[11px] uppercase tracking-[0.2em] text-stone font-medium">Cost · Output · Trust</div>
+      <span class="text-[10px] uppercase tracking-[0.2em] text-stone font-medium">mixed labels per metric</span>
+    </div>
     <div class="grid grid-cols-1 sm:grid-cols-3 gap-px bg-mist dark:bg-slate border border-mist dark:border-slate rounded-lg overflow-hidden">
 
       <div class="metric-card bg-paper dark:bg-graphite p-7">
@@ -108,6 +222,9 @@
 {% block scripts %}
 <script>
 let trendChart = null;
+let r3CurrentActiveHours = 0;
+const WORKING_DAYS_PER_MONTH = 22;
+const WORKING_HOURS_PER_DAY = 8;
 
 async function fetchJSON(url) {
   const r = await fetch(url);
@@ -121,9 +238,11 @@ const fmtInt = n => (n || 0).toLocaleString('en-US');
 async function loadHighlights(days) {
   try {
     const h = await fetchJSON(`/api/highlights?days=${days}`);
+    document.getElementById('metric-active').textContent = `${h.active_hours}h`;
+    document.getElementById('metric-wall').textContent = `${h.wall_hours}h`;
+    document.getElementById('metric-days').textContent = h.days_equivalent;
     document.getElementById('metric-leverage').textContent = `×${h.leverage}`;
     document.getElementById('metric-parallelism').textContent = h.parallelism;
-    document.getElementById('metric-days').textContent = h.days_equivalent;
     document.getElementById('metric-lines').textContent = fmtInt(h.lines_real);
     document.getElementById('metric-lines-pct').textContent = `${h.real_pct}% of raw · Factual`;
     document.getElementById('metric-cost').textContent = fmtCurrency(h.cost_total);
@@ -165,6 +284,94 @@ function renderRobustness(checks) {
     `;
     container.appendChild(row);
   });
+}
+
+async function loadProjectsForR3(days) {
+  try {
+    const data = await fetchJSON(`/api/projects?days=${days}`);
+    const select = document.getElementById('r3-project');
+    select.innerHTML = '';
+    if (!data.length) {
+      select.innerHTML = '<option value="">No projects in window</option>';
+      r3CurrentActiveHours = 0;
+      computeR3();
+      return;
+    }
+    // Top 10 by hours
+    data.slice(0, 10).forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p.project_id;
+      opt.dataset.hours = p.total_hours;
+      opt.dataset.commits = p.commits;
+      opt.dataset.cost = p.total_cost;
+      opt.dataset.tool = p.dominant_tool;
+      opt.textContent = `${p.project_id}  ·  ${p.total_hours}h  ·  ${p.commits} commits`;
+      select.appendChild(opt);
+    });
+    const savedId = localStorage.getItem('ship1000x-r3-project');
+    if (savedId && Array.from(select.options).some(o => o.value === savedId)) {
+      select.value = savedId;
+    }
+    onR3ProjectChange();
+  } catch (e) {
+    console.error('Projects error:', e);
+  }
+}
+
+function loadR3Estimate(projectId) {
+  try {
+    const raw = localStorage.getItem(`ship1000x-r3-est:${projectId}`);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch (e) { return null; }
+}
+
+function saveR3Estimate(projectId, people, months) {
+  localStorage.setItem(`ship1000x-r3-est:${projectId}`,
+    JSON.stringify({people, months}));
+}
+
+function onR3ProjectChange() {
+  const select = document.getElementById('r3-project');
+  const opt = select.selectedOptions[0];
+  if (!opt || !opt.value) {
+    r3CurrentActiveHours = 0;
+    document.getElementById('r3-project-stats').textContent = '—';
+    computeR3();
+    return;
+  }
+  localStorage.setItem('ship1000x-r3-project', opt.value);
+  r3CurrentActiveHours = parseFloat(opt.dataset.hours) || 0;
+  const cost = parseFloat(opt.dataset.cost) || 0;
+  document.getElementById('r3-project-stats').textContent =
+    `${r3CurrentActiveHours}h active · ${opt.dataset.commits} commits · $${cost.toFixed(0)} · ${opt.dataset.tool}`;
+  // Restore saved estimate for this project (if any)
+  const saved = loadR3Estimate(opt.value);
+  if (saved) {
+    document.getElementById('r3-people').value = saved.people;
+    document.getElementById('r3-months').value = saved.months;
+  }
+  computeR3();
+}
+
+function computeR3() {
+  const people = parseFloat(document.getElementById('r3-people').value) || 0;
+  const months = parseFloat(document.getElementById('r3-months').value) || 0;
+  const out = document.getElementById('r3-leverage');
+  const formula = document.getElementById('r3-formula');
+  if (!people || !months || !r3CurrentActiveHours) {
+    out.textContent = '—';
+    formula.textContent = 'pick a project + fill people / months';
+    return;
+  }
+  const teamHours = people * months * WORKING_DAYS_PER_MONTH * WORKING_HOURS_PER_DAY;
+  const leverage = teamHours / r3CurrentActiveHours;
+  out.textContent = `×${leverage.toFixed(1)}`;
+  formula.textContent =
+    `${people} × ${months} mo × ${WORKING_DAYS_PER_MONTH}d × ${WORKING_HOURS_PER_DAY}h = ${teamHours.toFixed(0)}h vs your ${r3CurrentActiveHours}h`;
+  // Persist on each compute (debounced effectively by rapid input changes)
+  const select = document.getElementById('r3-project');
+  if (select.value) saveR3Estimate(select.value, people, months);
 }
 
 async function loadTrend(days) {
@@ -238,7 +445,6 @@ async function loadTrust(days) {
     const container = document.getElementById('trust-bars');
     container.innerHTML = '';
     data.per_source.forEach(s => {
-      // Sober color mapping (no neon)
       const colorClass = s.score >= 90 ? 'bg-sage'
                         : s.score >= 70 ? 'bg-ambre-500'
                         : s.score >= 40 ? 'bg-clay'
@@ -262,8 +468,20 @@ async function loadTrust(days) {
 
 async function reloadData() {
   const days = window.getWindowDays();
-  await Promise.all([loadHighlights(days), loadTrend(days), loadTrust(days)]);
+  await Promise.all([
+    loadHighlights(days),
+    loadTrend(days),
+    loadTrust(days),
+    loadProjectsForR3(days),
+  ]);
 }
+
+// Wire R3 inputs
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('r3-project').addEventListener('change', onR3ProjectChange);
+  document.getElementById('r3-people').addEventListener('input', computeR3);
+  document.getElementById('r3-months').addEventListener('input', computeR3);
+});
 
 reloadData();
 </script>

@@ -5,7 +5,37 @@ All notable changes to Ship1000x are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.5.0] — 2026-05-15 — Trust Score honesty fix (breaking API)
+## [0.5.0] — 2026-05-15 — Trust Score honesty fix + 3-ratios overview redesign
+
+### Added — Web dashboard overview restructured around 3 explicit ratios
+- **Pedagogical banner** at the top : "Ship1000x reports three distinct ratios
+  of AI leverage — most dashboards mix them silently. Here they're separated,
+  with their confidence label."
+- **Section Engagement** (Factual) : your active hours · wall hours ·
+  person-days equivalent. The raw inputs.
+- **Section R1 · Time leverage** (Factual) : `time leverage ×N` (cumulated
+  work / your active) + `parallel agents` (avg simultaneous IA sessions),
+  with explicit "ℹ For each hour you're active, this much total work happens".
+- **Section R2 · Agent efficiency** (Indicative) : pedagogical block stating
+  "10× — 50× per task (refactor ~30×, boilerplate ~50×, debug ~5×). Not
+  measured directly by Ship1000x — task-dependent." Honest about the limit.
+- **Section R3 · Project output vs human team** (Estimative · your input) :
+  project selector (top 10 by hours in window) + 2 inputs (people, months) +
+  computed leverage `×N` with the formula shown explicitly. Per-project
+  estimates persist in localStorage. Disclaimer : "Self-reported. Ship1000x
+  cannot estimate this for you — only YOU know your project's true scope."
+- **Section Cost · Output · Trust** : real lines · total cost · trust score
+  in one row, each with their own confidence label.
+
+### Why this redesign
+The previous overview presented "AI Leverage ×3" as a single headline number
+without saying which ratio it represented. Three different ratios were being
+conflated across LinkedIn, vendor decks, and our own dashboard. The fix is
+to separate them, label each one's confidence (Factual / Indicative /
+Estimative), and let the user input the part Ship1000x cannot measure
+(R3 — project scope vs equivalent human team).
+
+
 
 ### Changed — Trust Score is now the raw weighted average per source
 - **No additive bonuses, no silent cap.** Previously the global score was
