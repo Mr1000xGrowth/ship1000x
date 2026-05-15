@@ -847,10 +847,56 @@ def _run_projects_select() -> None:
 
 
 @cli.command()
-def init():
-    """Setup initial interactif (consent + config + projets auto-detectes)."""
+@click.pass_context
+def init(ctx: click.Context):
+    """Setup initial interactif (consent + config + auto-detection projets).
+
+    Apres la configuration : lance automatiquement une premiere ingestion
+    et affiche les Highlights pour donner immediatement de la valeur a
+    l'utilisateur. Pas besoin de chercher quelle commande lancer.
+    """
+    from rich.prompt import Confirm
+
     from ship1000x.core.setup_wizard import run_init
     run_init(REPO_ROOT, PROJECTS_CONFIG, PRIVACY_CONFIG, console)
+
+    # First-launch experience : auto-ingest + highlights
+    console.print()
+    if Confirm.ask("[bold]Lancer la premiere collecte maintenant ?[/bold] (recommande)", default=True):
+        console.print()
+        console.print("[cyan]→ Premiere ingestion en cours...[/cyan]")
+        try:
+            ctx.invoke(ingest, source="all")
+        except Exception as e:
+            console.print(f"[yellow]Ingestion partielle : {e}[/yellow]")
+
+        console.print()
+        console.print("[cyan]→ Calcul des rollups...[/cyan]")
+        try:
+            ctx.invoke(rollup, since="30d")
+        except Exception as e:
+            console.print(f"[yellow]Rollup partiel : {e}[/yellow]")
+
+        console.print()
+        console.print("[cyan]→ Calibration de ton profil cadence...[/cyan]")
+        try:
+            ctx.invoke(calibrate, window=14, user=None)
+        except Exception as e:
+            console.print(f"[yellow]Calibration : {e}[/yellow]")
+
+        console.print()
+        console.print("[bold green]🎉 Setup termine ! Voici tes premiers Highlights :[/bold green]")
+        try:
+            ctx.invoke(highlights, since="30d")
+        except Exception as e:
+            console.print(f"[yellow]Highlights indisponibles : {e}[/yellow]")
+            console.print("[dim]Lance manuellement : [cyan]ship1000x highlights[/cyan][/dim]")
+    else:
+        console.print()
+        console.print("[dim]OK. Tu peux lancer plus tard :[/dim]")
+        console.print("  [cyan]ship1000x ingest[/cyan]        # collecte")
+        console.print("  [cyan]ship1000x calibrate[/cyan]     # ton profil cadence")
+        console.print("  [cyan]ship1000x highlights[/cyan]    # le showcase")
 
 
 @cli.command()
