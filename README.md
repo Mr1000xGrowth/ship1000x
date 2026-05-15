@@ -65,20 +65,67 @@ ship1000x init
 All collectors are **read-only**. Nothing is ever modified, deleted, or
 transmitted from your machine without explicit opt-in.
 
-## Core commands
+## Quick start in 30 seconds
 
 ```bash
-ship1000x init                     # interactive setup (consent, projects, S3 opt-in)
-ship1000x ingest                   # collect events from all enabled sources
-ship1000x today                    # today's activity summary
-ship1000x week                     # last 7 days with project breakdown
-ship1000x project my-app           # drill-down on one project
-ship1000x insights                 # overview + ratios + multiplier
+ship1000x init                     # interactive setup, then auto-runs ingest + highlights
+```
+
+That's it. After the wizard you immediately see your **Highlights** showcase :
+
+```
+🚀 Highlights — derniers 30 jours
+  Effet de levier IA           x3.0        [Defensible, capped]
+  Sessions IA en parallèle     1.6         (moyenne)
+  Équivalent jours-homme       32 jours    (en 30 jours cal.)
+  Production réelle            607 008     lignes vrai code (92%) [Factual]
+  Coût agentique               $5 396      [93% Factual, rest heuristic]
+  Trust Score                  96/100      base (Factual). +8 bonuses → 100/100
+```
+
+## What's new in V1 (v0.2.0)
+
+- **`ship1000x highlights`** — the showcase view. Audit-ready WOW numbers
+  with explicit confidence labels per metric (Factual / Defensible /
+  Indicative / Heuristic).
+- **`ship1000x calibrate`** — computes your personal P95 cadence
+  threshold from your actual rhythm (no arbitrary 5-min hardcode).
+- **`ship1000x today --compare-modes`** — see 5 active-time modes side
+  by side : strict (5 min) / auto P95 / loose (15 min) / agent IA estimated
+  / wall-clock. Arithmetic verification visible.
+- **`ship1000x summary`** — cross-tab matrix : per-project breakdown by
+  tool (Claude Code, Codex, Cursor, …) + dominant tool + cost. Filter by
+  `--client <name>` if you tag projects.yaml with `client:`.
+- **Trust Score** — every metric carries its confidence level. Per-source
+  scoring (high=100, medium=70, low=40) + global composite with bonuses
+  (cadence calibrated, daily_unified populated) and penalties (critical
+  source missing).
+- **Cross-source unified active time** — fixes the multi-agent overcount
+  bug (×2.85 measured on real DB). New `daily_unified` table merges
+  human events from all sources before aggregating.
+- **Aliases** — merge multiple project_ids into one canonical project
+  (e.g. local folder name "myapp" + git remote "github.com/org/myapp" =
+  one project) via `projects.yaml > aliases:`.
+
+## All commands
+
+```bash
+ship1000x init                     # interactive setup (auto-runs ingest + highlights at the end)
+ship1000x highlights               # 🚀 the showcase — start here
+ship1000x calibrate                # personal P95 cadence threshold
+ship1000x today                    # today by project
+ship1000x today --compare-modes    # 5 active-time modes side-by-side
+ship1000x summary --since 30d      # matrix per-project × tool
+ship1000x summary --client X       # filter by client tag
+ship1000x week                     # last 7 days by project
+ship1000x project my-app --since 30d  # drill-down on one project
+ship1000x insights                 # full report (ratios + multipliers + signals + Trust Score)
 ship1000x multiplier               # output factor vs senior-mid baseline
 ship1000x profile                  # heatmap, sessions, habits
-ship1000x signals                  # alerts: burnout, project drift
+ship1000x signals                  # alerts: burnout, project drift, cost spikes
 ship1000x compare proj-a proj-b    # side-by-side 2 projects
-ship1000x export                   # generate Markdown report
+ship1000x export --output rep.md   # generate full Markdown report
+ship1000x ingest                   # manual data collection (the cron does it nightly)
 ship1000x status                   # DB state + last ingestion
 ship1000x doctor                   # diagnostic + fix common issues
 ship1000x delete --confirm         # wipe all local data
@@ -86,7 +133,7 @@ ship1000x delete --confirm         # wipe all local data
 
 Run `ship1000x --help` for the full list (40+ commands including
 `rollup`, `push`, `daily`, `audit`, `reclassify`, `discover`, `health`,
-`install-scheduler`, etc.).
+`install-scheduler`).
 
 ## Privacy & consent
 
@@ -166,13 +213,30 @@ ruff check .
 - [x] S3 push opt-in
 - [x] 40+ CLI commands + Markdown export
 
-**v0.2.0** (next)
+**v0.2.0** (this release — V1 hardening)
 - [x] Per-project consent wizard (`init` + `projects --select`)
 - [x] Unclassified-projects warning at `daily`
+- [x] Claude Code SSE chunks dedup by message.id (fixes ×2.49 overcount)
+- [x] Cache tokens captured (`cache_read_input_tokens` + `cache_creation_input_tokens`)
+- [x] Cross-source unified active time (`daily_unified` table, fixes ×2.85 multi-agent overcount)
+- [x] Personal P95 cadence threshold (adaptive per user)
+- [x] Trust Score per source + global composite (the differentiator)
+- [x] `highlights` showcase command + first-launch UX (`init` chains to highlights)
+- [x] `summary` cross-tab matrix (project × tool, --client filter)
+- [x] `today --compare-modes` (5 modes side by side)
+- [x] Privacy hardening : filter bypass fix, 46 keys whitelist, recursive path anonymization, central guardrail
+- [x] Conservative `share_config` for cloud push (PII hashed, financials stripped by default)
+- [x] Productivity ratios based on `lines_real_added` (V2 breakdown defensible)
+- [x] 6 new public English docs (COVERAGE / METHODOLOGY / PRIVACY / TRUST_SCORE / COLLECTORS / QUICKSTART)
+- [x] Aliases support in `projects.yaml` (merge logically-same projects)
+- [x] CI green on Python 3.10/3.11/3.12 (ubuntu + macos)
+
+**v0.3.0** (next)
 - [ ] Local Flask web dashboard (`ship1000x dashboard` → `localhost:8765`)
 - [ ] PyPI release
 - [ ] GitHub API enrichment (CI status, PR reviews)
-- [ ] Aider, Zed collectors
+- [ ] Continue.dev, Aider, Antigravity collectors (community welcome)
+- [ ] Better Codex coverage via mac_system focus apps cross-reference
 
 **v1.0.0** (when stable)
 - [ ] Packaging as standalone macOS app
