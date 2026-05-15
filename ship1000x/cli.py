@@ -1730,36 +1730,77 @@ def highlights(since: str):
     active_h = (unif["u"] or 0) / 3600
     wall_h = (unif["w"] or 0) / 3600
     threshold_min = (unif["thr"] or 0) / 60
-    levier = (wall_brut / 3600 / active_h) if active_h else 0
+
+    # Cost split factual vs heuristic
+    with storage.conn() as conn:
+        cost_factual = conn.execute(
+            """SELECT SUM(cost_estimated) AS c FROM events
+               WHERE date(started_at) >= date('now', ? || ' days')
+                 AND source IN ('claude_code', 'anthropic_usage', 'openai_usage', 'openclaw', 'web_exports')""",
+            (f"-{days}",),
+        ).fetchone()["c"] or 0
+    cost_heuristic = max(0, cost - cost_factual)
+    cost_factual_pct = (cost_factual / cost * 100) if cost else 0
+
+    # Cap wall_brut for sources where wall_clock/duration > 5x (signal "app open without active use")
+    # We use a defensible heuristic : cap each source's wall_clock at duration * 5
+    with storage.conn() as conn:
+        rows_per_source = conn.execute(
+            """SELECT source, SUM(duration_sec) AS dur, SUM(wall_clock_sec) AS wall
+               FROM events WHERE date(started_at) >= date('now', ? || ' days') AND source != 'git'
+               GROUP BY source""",
+            (f"-{days}",),
+        ).fetchall()
+    wall_brut_capped = 0
+    for r in rows_per_source:
+        d = r["dur"] or 0
+        w = r["wall"] or 0
+        # Cap at 5x duration (defensible : an app cannot be "active" 5x longer than typed time
+        # without becoming a signal of "app open without use")
+        wall_brut_capped += min(w, d * 5) if d > 0 else 0
+
+    # Multipliers (defensible) :
     presence = (wall_h / active_h) if active_h else 0
+    levier = (wall_brut_capped / 3600 / active_h) if active_h else 0
     parallelism = (levier / presence) if presence else 0
     days_equivalent = active_h / 8  # 1 jour-homme = 8h ouvrées
     lines_per_hour = (lines_real / active_h) if active_h else 0
-    cost_per_line = (cost / lines_real) if lines_real else 0
+    cost_per_line = (cost_factual / lines_real) if lines_real else 0  # use factual cost only
     real_pct = (lines_real / lines_raw * 100) if lines_raw else 0
 
-    # Trust Score
+    # Trust Score (honest : show base + bonuses, not just final)
     from ship1000x.insights.trust_score import compute_global_score
     trust = compute_global_score(storage, window_days=days, user_email=user_email)
+    trust_base = trust.get("base", trust["score"])
+    trust_bonus = trust.get("bonus", 0)
+
+    # Confidence labels per metric (Factual/Defensible/Indicative)
+    cf_lines = "[Factual]"  # git lines = ground truth
+    cf_levier = "[Defensible, capped]"  # capped wall_brut anti-inflation
+    if cost_factual_pct >= 99.5:
+        cf_cost = "[Factual]"
+    else:
+        cf_cost = f"[{cost_factual_pct:.0f}% Factual, rest heuristic]"
 
     # Format the showcase panel
     lines = []
     lines.append("")
-    lines.append(f"  [bold magenta]Multiplicateur IA[/bold magenta]            [bold cyan]x{levier:.1f}[/bold cyan]        [dim]effet de levier brut[/dim]")
-    lines.append(f"  [bold magenta]Agents en parallèle[/bold magenta]          [bold cyan]{parallelism:.1f}[/bold cyan]         [dim](moyenne sur la fenêtre)[/dim]")
-    lines.append(f"  [bold magenta]Équivalent jours-homme[/bold magenta]       [bold cyan]{days_equivalent:.0f} jours[/bold cyan]    [dim](en {days} jours calendaires)[/dim]")
+    lines.append(f"  [bold magenta]Effet de levier IA[/bold magenta]           [bold cyan]x{levier:.1f}[/bold cyan]        [dim]{cf_levier}[/dim]")
+    lines.append(f"  [bold magenta]Sessions IA en parallèle[/bold magenta]     [bold cyan]{parallelism:.1f}[/bold cyan]         [dim](moyenne, instances simultanées)[/dim]")
+    lines.append(f"  [bold magenta]Équivalent jours-homme[/bold magenta]       [bold cyan]{days_equivalent:.0f} jours[/bold cyan]    [dim](en {days} jours cal.)[/dim]")
     lines.append("")
-    lines.append(f"  [bold green]Production réelle[/bold green]            [bold cyan]{lines_real:,}[/bold cyan]   [dim]lignes de vrai code ({real_pct:.0f}% du brut)[/dim]".replace(",", " "))
-    lines.append(f"  [bold green]Coût agentique[/bold green]               [bold cyan]${cost:,.0f}[/bold cyan]      [dim]pour {active_h:.0f}h actives[/dim]".replace(",", " "))
+    lines.append(f"  [bold green]Production réelle[/bold green]            [bold cyan]{lines_real:,}[/bold cyan]   [dim]lignes vrai code ({real_pct:.0f}%) {cf_lines}[/dim]".replace(",", " "))
+    lines.append(f"  [bold green]Coût agentique[/bold green]               [bold cyan]${cost:,.0f}[/bold cyan]      [dim]{cf_cost}[/dim]".replace(",", " "))
     lines.append(f"  [bold green]Cost / ligne nette[/bold green]           [bold cyan]${cost_per_line:.4f}[/bold cyan]   [dim]ultra-efficient[/dim]")
     lines.append("")
-    lines.append(f"  [bold yellow]Trust Score global[/bold yellow]           [bold cyan]{trust['score']}/100[/bold cyan]     [dim]{trust['label']} (audit-ready)[/dim]")
+    lines.append(f"  [bold yellow]Trust Score[/bold yellow]                  [bold cyan]{trust_base}/100[/bold cyan]     [dim]base (Factual). +{trust_bonus} bonuses → {trust['score']}/100[/dim]")
     lines.append(f"  [bold yellow]Sources captées[/bold yellow]              [bold cyan]{sources_count}[/bold cyan]          [dim]Factual + Defensible[/dim]")
     lines.append("")
     lines.append(f"  [dim]→ Avec 1h de ton temps, tu génères ~{levier:.1f}h d'exécution agentique[/dim]")
-    lines.append(f"  [dim]  et {lines_per_hour:.0f} lignes de code défendable.[/dim]")
+    lines.append(f"  [dim]  et {lines_per_hour:.0f} lignes de vrai code défendable.[/dim]")
     lines.append("")
-    lines.append(f"  [dim italic]Calculé avec cap_time = {threshold_min:.1f} min (P95 personnel calibré sur 14j)[/dim italic]")
+    lines.append(f"  [dim italic]Calculé avec cap_time = {threshold_min:.1f} min (P95 personnel)[/dim italic]")
+    lines.append(f"  [dim italic]Wall_brut capped at 5x duration_sec per source (anti-inflation)[/dim italic]")
 
     title = f"🚀 Highlights — derniers {days} jours"
     panel = Panel("\n".join(lines), title=title, border_style="magenta", expand=False)
