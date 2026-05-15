@@ -11,6 +11,8 @@ Codex, Cursor, git, and shell activity — all from your own machine, no SaaS.
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![Status: Beta v0.5.0](https://img.shields.io/badge/status-beta%20v0.5.0-c8a464.svg)]()
 
+![Ship1000x dashboard demo](https://github.com/Mr1000xGrowth/ship1000x/releases/download/v0.5.0/ship1000x-demo.gif)
+
 ## Why
 
 Hours in front of your IDE are not hours coding. AI-assisted development mixes
