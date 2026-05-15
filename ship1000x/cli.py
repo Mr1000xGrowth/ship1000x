@@ -29,13 +29,14 @@ from rich.table import Table
 # Permet d'importer core/ / collectors/ depuis la racine du projet
 sys.path.insert(0, str(Path(__file__).parent))
 
-from ship1000x.core.classifier import Classifier
-from ship1000x.core.storage import Storage
-
 # User-facing paths follow the XDG Base Directory spec (Linux) / match
 # equivalents on macOS. Config and data always live in the user home,
 # never inside the installed package (critical for `pip install` users).
 import os as _os
+
+from ship1000x.core.classifier import Classifier
+from ship1000x.core.storage import Storage
+
 XDG_CONFIG_HOME = Path(_os.environ.get("XDG_CONFIG_HOME") or (Path.home() / ".config"))
 XDG_DATA_HOME = Path(_os.environ.get("XDG_DATA_HOME") or (Path.home() / ".local" / "share"))
 CONFIG_DIR = XDG_CONFIG_HOME / "ship1000x"
@@ -546,6 +547,147 @@ def week():
     )
 
     console.print(table)
+
+
+@cli.command()
+@click.option("--since", default="30d", help="Window: 7d, 30d, 90d, 365d")
+@click.option("--client", default=None, help="Filter by client tag (from projects.yaml)")
+@click.option("--top", default=20, type=int, help="Top N projects to show (default 20)")
+def summary(since: str, client: str | None, top: int):
+    """Cross-tabulated view : per-project breakdown by tool (Claude Code,
+    Codex, Cursor, OpenClaw, git, etc.) + total time + cost + dominant tool.
+
+    The single-pane view : everything you need to know about your projects
+    in one table.
+    """
+    storage = _get_storage()
+    days = _parse_since_days(since)
+    cutoff = datetime.now() - timedelta(days=days)
+
+    # Optional filter by client tag from projects.yaml
+    project_to_client: dict[str, str] = {}
+    if client:
+        projects_cfg = _load_yaml(PROJECTS_CONFIG)
+        for p in projects_cfg.get("projects") or []:
+            if p.get("client"):
+                project_to_client[p["id"]] = p["client"]
+
+    rows = storage.query(
+        """
+        SELECT
+            COALESCE(project_id, 'unclassified') AS project,
+            source,
+            SUM(duration_sec) AS sec,
+            SUM(token_input + token_output) AS tokens,
+            SUM(cost_estimated) AS cost,
+            COUNT(*) AS events
+        FROM events
+        WHERE started_at >= ?
+        GROUP BY project, source
+        ORDER BY project, source
+        """,
+        (cutoff.isoformat(),),
+    )
+
+    if not rows:
+        console.print(f"[yellow]Aucune activite sur {since}.[/yellow]")
+        return
+
+    # Aggregate by project, tracking source breakdown
+    by_project: dict[str, dict] = {}
+    all_sources: set[str] = set()
+    for r in rows:
+        pid = r["project"]
+        if client:
+            if project_to_client.get(pid) != client:
+                continue
+        if pid not in by_project:
+            by_project[pid] = {
+                "total_sec": 0, "total_tokens": 0, "total_cost": 0.0,
+                "events": 0, "sources": {},
+            }
+        p = by_project[pid]
+        p["total_sec"] += r["sec"] or 0
+        p["total_tokens"] += r["tokens"] or 0
+        p["total_cost"] += r["cost"] or 0
+        p["events"] += r["events"] or 0
+        p["sources"][r["source"]] = (r["sec"] or 0, r["events"] or 0)
+        all_sources.add(r["source"])
+
+    # Sort projects by total time desc, take top N
+    sorted_projects = sorted(by_project.items(), key=lambda x: -x[1]["total_sec"])[:top]
+
+    title = f"Project summary — {since}"
+    if client:
+        title += f" — client: {client}"
+    table = Table(title=title, show_header=True)
+    table.add_column("Projet", style="cyan", no_wrap=False)
+    table.add_column("Actif", justify="right")
+    table.add_column("Outil dominant", style="magenta")
+    table.add_column("Sessions IA", justify="right")
+    table.add_column("Commits", justify="right")
+    table.add_column("Cost $", justify="right")
+
+    grand_sec = 0
+    grand_cost = 0.0
+    grand_sessions_ia = 0
+    grand_commits = 0
+    for pid, info in sorted_projects:
+        # Find dominant tool by active time (excluding git which has 0 active)
+        sources_ia = {s: v for s, v in info["sources"].items() if s != "git"}
+        if sources_ia:
+            dom_source = max(sources_ia.items(), key=lambda x: x[1][0])
+            dom_label = dom_source[0]
+            dom_sec = dom_source[1][0]
+            dom_pct = (dom_sec / info["total_sec"] * 100) if info["total_sec"] else 0
+            dom_str = f"{dom_label} ({dom_pct:.0f}%)" if dom_pct >= 1 else "—"
+        else:
+            dom_str = "git only"
+
+        sessions_ia = sum(v[1] for s, v in info["sources"].items() if s != "git")
+        commits = info["sources"].get("git", (0, 0))[1]
+
+        grand_sec += info["total_sec"]
+        grand_cost += info["total_cost"]
+        grand_sessions_ia += sessions_ia
+        grand_commits += commits
+
+        # Truncate long project_ids for readability
+        pid_disp = pid if len(pid) <= 60 else pid[:57] + "..."
+
+        table.add_row(
+            pid_disp,
+            _fmt_duration(info["total_sec"]),
+            dom_str,
+            str(sessions_ia),
+            str(commits),
+            f"{info['total_cost']:.2f}",
+        )
+
+    table.add_section()
+    table.add_row(
+        f"[bold]TOTAL ({len(sorted_projects)} projets)[/bold]",
+        f"[bold]{_fmt_duration(grand_sec)}[/bold]",
+        "",
+        f"[bold]{grand_sessions_ia}[/bold]",
+        f"[bold]{grand_commits}[/bold]",
+        f"[bold]{grand_cost:.2f}[/bold]",
+    )
+
+    console.print(table)
+    console.print()
+
+    # Per-source breakdown summary (informational footer)
+    sources_global: dict[str, int] = {}
+    for info in by_project.values():
+        for src, (sec, _) in info["sources"].items():
+            sources_global[src] = sources_global.get(src, 0) + sec
+
+    console.print("[bold]Time per source (across all projects)[/bold]")
+    for src, sec in sorted(sources_global.items(), key=lambda x: -x[1]):
+        if sec > 0:
+            pct = (sec / grand_sec * 100) if grand_sec else 0
+            console.print(f"  {src:<20} {_fmt_duration(sec):>8}  ({pct:.1f}%)")
 
 
 @cli.command()
@@ -1531,6 +1673,100 @@ def _parse_since_days(since: str) -> int:
     if unit == "h":
         return max(1, n // 24)
     return 30
+
+
+@cli.command()
+@click.option("--since", default="30d", help="Window ex: 7d, 30d, 90d")
+def highlights(since: str):
+    """Showcase view : the WOW numbers that demonstrate AI leverage.
+
+    Designed to be the first thing a user sees. Audit-ready, defensible,
+    impressive. Highlights what Ship1000x measures that no other tool does.
+    """
+    from rich.panel import Panel
+
+    storage = _get_storage()
+    days = _parse_since_days(since)
+    user_email = _get_user_email()
+
+    # 1. Active time (from daily_unified V3 - cross-source dedup, P95 calibrated)
+    with storage.conn() as conn:
+        unif = conn.execute(
+            "SELECT SUM(active_sec_unified) AS u, SUM(wall_clock_sec) AS w, "
+            "AVG(threshold_used_sec) AS thr "
+            "FROM daily_unified WHERE date >= date('now', ? || ' days')",
+            (f"-{days}",),
+        ).fetchone()
+        # Wall_clock summed by source (for "leverage" multiplier - reflects parallelism)
+        wall_brut = conn.execute(
+            "SELECT SUM(wall_clock_sec) AS w FROM events "
+            "WHERE date(started_at) >= date('now', ? || ' days') AND source != 'git'",
+            (f"-{days}",),
+        ).fetchone()["w"] or 0
+        # Cost
+        cost = conn.execute(
+            "SELECT SUM(cost_estimated) AS c FROM events "
+            "WHERE date(started_at) >= date('now', ? || ' days')",
+            (f"-{days}",),
+        ).fetchone()["c"] or 0
+        # Lines (real defensible)
+        lines_real = conn.execute(
+            "SELECT SUM(CAST(COALESCE(json_extract(raw_meta, '$.lines_real_added'), 0) AS INTEGER)) AS l "
+            "FROM events WHERE source = 'git' AND date(started_at) >= date('now', ? || ' days')",
+            (f"-{days}",),
+        ).fetchone()["l"] or 0
+        lines_raw = conn.execute(
+            "SELECT SUM(CAST(COALESCE(json_extract(raw_meta, '$.lines_added'), 0) AS INTEGER)) AS l "
+            "FROM events WHERE source = 'git' AND date(started_at) >= date('now', ? || ' days')",
+            (f"-{days}",),
+        ).fetchone()["l"] or 0
+        # Sources count
+        sources_count = conn.execute(
+            "SELECT COUNT(DISTINCT source) AS n FROM events "
+            "WHERE date(started_at) >= date('now', ? || ' days')",
+            (f"-{days}",),
+        ).fetchone()["n"] or 0
+
+    active_h = (unif["u"] or 0) / 3600
+    wall_h = (unif["w"] or 0) / 3600
+    threshold_min = (unif["thr"] or 0) / 60
+    levier = (wall_brut / 3600 / active_h) if active_h else 0
+    presence = (wall_h / active_h) if active_h else 0
+    parallelism = (levier / presence) if presence else 0
+    days_equivalent = active_h / 8  # 1 jour-homme = 8h ouvrées
+    lines_per_hour = (lines_real / active_h) if active_h else 0
+    cost_per_line = (cost / lines_real) if lines_real else 0
+    real_pct = (lines_real / lines_raw * 100) if lines_raw else 0
+
+    # Trust Score
+    from ship1000x.insights.trust_score import compute_global_score
+    trust = compute_global_score(storage, window_days=days, user_email=user_email)
+
+    # Format the showcase panel
+    lines = []
+    lines.append("")
+    lines.append(f"  [bold magenta]Multiplicateur IA[/bold magenta]            [bold cyan]x{levier:.1f}[/bold cyan]        [dim]effet de levier brut[/dim]")
+    lines.append(f"  [bold magenta]Agents en parallèle[/bold magenta]          [bold cyan]{parallelism:.1f}[/bold cyan]         [dim](moyenne sur la fenêtre)[/dim]")
+    lines.append(f"  [bold magenta]Équivalent jours-homme[/bold magenta]       [bold cyan]{days_equivalent:.0f} jours[/bold cyan]    [dim](en {days} jours calendaires)[/dim]")
+    lines.append("")
+    lines.append(f"  [bold green]Production réelle[/bold green]            [bold cyan]{lines_real:,}[/bold cyan]   [dim]lignes de vrai code ({real_pct:.0f}% du brut)[/dim]".replace(",", " "))
+    lines.append(f"  [bold green]Coût agentique[/bold green]               [bold cyan]${cost:,.0f}[/bold cyan]      [dim]pour {active_h:.0f}h actives[/dim]".replace(",", " "))
+    lines.append(f"  [bold green]Cost / ligne nette[/bold green]           [bold cyan]${cost_per_line:.4f}[/bold cyan]   [dim]ultra-efficient[/dim]")
+    lines.append("")
+    lines.append(f"  [bold yellow]Trust Score global[/bold yellow]           [bold cyan]{trust['score']}/100[/bold cyan]     [dim]{trust['label']} (audit-ready)[/dim]")
+    lines.append(f"  [bold yellow]Sources captées[/bold yellow]              [bold cyan]{sources_count}[/bold cyan]          [dim]Factual + Defensible[/dim]")
+    lines.append("")
+    lines.append(f"  [dim]→ Avec 1h de ton temps, tu génères ~{levier:.1f}h d'exécution agentique[/dim]")
+    lines.append(f"  [dim]  et {lines_per_hour:.0f} lignes de code défendable.[/dim]")
+    lines.append("")
+    lines.append(f"  [dim italic]Calculé avec cap_time = {threshold_min:.1f} min (P95 personnel calibré sur 14j)[/dim italic]")
+
+    title = f"🚀 Highlights — derniers {days} jours"
+    panel = Panel("\n".join(lines), title=title, border_style="magenta", expand=False)
+    console.print()
+    console.print(panel)
+    console.print()
+    console.print(f"[dim]Pour le détail technique : [cyan]ship1000x insights --since {days}d[/cyan][/dim]")
 
 
 @cli.command()

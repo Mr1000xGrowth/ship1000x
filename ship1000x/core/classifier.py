@@ -246,8 +246,34 @@ def resolve_repo_uid(path: str | None) -> tuple[str, str, float]:
 
 
 class Classifier:
-    def __init__(self, project_rules: list[ProjectRule]):
+    def __init__(
+        self,
+        project_rules: list[ProjectRule],
+        aliases: dict[str, str] | None = None,
+    ):
         self.rules = project_rules
+        # Aliases : map "old_or_alternative_id" -> "canonical_id".
+        # Used to merge multiple project_ids into a single logical project
+        # (e.g. local folder name "myapp" + git remote "github.com/org/myapp").
+        # Read from projects.yaml > aliases: section.
+        self.aliases: dict[str, str] = aliases or {}
+
+    def resolve_alias(self, project_id: str | None) -> str | None:
+        """Apply alias mapping if any. Returns canonical id (or original if no alias)."""
+        if not project_id:
+            return project_id
+        # Apply aliases transitively up to 5 hops to avoid infinite loop on cycles.
+        seen = set()
+        current = project_id
+        for _ in range(5):
+            if current in seen:
+                break
+            seen.add(current)
+            if current in self.aliases:
+                current = self.aliases[current]
+            else:
+                return current
+        return current
 
     @classmethod
     def from_yaml_config(cls, config: dict[str, Any]) -> Classifier:
@@ -262,7 +288,8 @@ class Classifier:
                 category=proj.get("category", "other"),
                 status=proj.get("status", "active"),
             ))
-        return cls(rules)
+        aliases = config.get("aliases") or {}
+        return cls(rules, aliases=aliases)
 
     def classify_cwd(self, cwd: str | None) -> tuple[str | None, float]:
         """Match cwd contre paths des projects. Retourne (project_id, confidence)."""
@@ -393,11 +420,21 @@ class Classifier:
           5.   Auto-resolution generique (.git/ parent + remote URL)
           6.   Nom du dossier parent (fallback sans git)
 
-        Avec l'auto-resolution, projects.yaml devient OPTIONNEL : il ne
-        sert qu'a fusionner plusieurs repos en 1 projet, renommer, ou
-        categoriser. Sans yaml, chaque repo = 1 projet via son remote
-        normalise.
+        Apres resolution, le project_id est passe par resolve_alias() pour
+        fusionner les renommages (ex: 'old-name' -> 'new-name') et les
+        doublons (ex: 'local-folder-name' -> 'github.com/org/repo-name').
         """
+        pid, conf = self._classify_session_raw(cwd, paths, title, git_remote)
+        return (self.resolve_alias(pid), conf)
+
+    def _classify_session_raw(
+        self,
+        cwd: str | None = None,
+        paths: list[str] | None = None,
+        title: str | None = None,
+        git_remote: str | None = None,
+    ) -> tuple[str | None, float]:
+        """Internal raw classification before alias resolution."""
         # 1. cwd exact via yaml
         pid, conf = self.classify_cwd(cwd)
         if pid:
