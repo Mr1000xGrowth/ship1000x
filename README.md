@@ -83,7 +83,19 @@ That's it. After the wizard you immediately see your **Highlights** showcase :
   Trust Score                  96/100      base (Factual). +8 bonuses → 100/100
 ```
 
-## What's new in V1 (v0.2.0)
+Want a visual dashboard ? One command :
+
+```bash
+ship1000x dashboard                # opens http://localhost:10000 in your browser
+```
+
+Premium neutral design (Inter typography, ambre accent), localhost-only
+(refuses external connections), no auth needed (your machine, your data).
+Pages : Overview (6 metric cards + trend chart + Trust Score breakdown by
+source) + Projects (sortable matrix project × tool × cost). Window selector
+7 / 14 / 30 / 60 / 90 / 180 / 365 days. Dark mode auto.
+
+## What's new in V1 (v0.2.0 → v0.4.0)
 
 - **`ship1000x highlights`** — the showcase view. Audit-ready WOW numbers
   with explicit confidence labels per metric (Factual / Defensible /
@@ -111,7 +123,9 @@ That's it. After the wizard you immediately see your **Highlights** showcase :
 
 ```bash
 ship1000x init                     # interactive setup (auto-runs ingest + highlights at the end)
+ship1000x dashboard                # 🌐 local web dashboard at localhost:10000
 ship1000x highlights               # 🚀 the showcase — start here
+ship1000x pulse                    # one-line daily check (the morning ritual)
 ship1000x calibrate                # personal P95 cadence threshold
 ship1000x today                    # today by project
 ship1000x today --compare-modes    # 5 active-time modes side-by-side
@@ -232,7 +246,7 @@ ruff check .
 - [x] CI green on Python 3.10/3.11/3.12 (ubuntu + macos)
 
 **v0.3.0** (next)
-- [ ] Local Flask web dashboard (`ship1000x dashboard` → `localhost:8765`)
+- [ ] Local Flask web dashboard (`ship1000x dashboard` → `localhost:10000`)
 - [ ] PyPI release
 - [ ] GitHub API enrichment (CI status, PR reviews)
 - [ ] Continue.dev, Aider, Antigravity collectors (community welcome)

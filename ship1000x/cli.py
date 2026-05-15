@@ -1802,7 +1802,7 @@ def _discover_github(owner: str) -> None:
 
 
 @cli.command()
-@click.option("--port", default=8765, type=int, help="Port to bind (default 8765)")
+@click.option("--port", default=10000, type=int, help="Port to bind (default 10000)")
 @click.option("--no-open", "no_open", is_flag=True, help="Do not auto-open the browser")
 def dashboard(port: int, no_open: bool):
     """Launch the local web dashboard (V1.2 MVP).

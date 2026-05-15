@@ -260,7 +260,7 @@ def create_app(db_path: Path, config_dir: Path) -> Flask:
     return app
 
 
-def run_server(db_path: Path, config_dir: Path, port: int = 8765, open_browser: bool = True) -> None:
+def run_server(db_path: Path, config_dir: Path, port: int = 10000, open_browser: bool = True) -> None:
     """Launch Flask dev server on localhost only.
 
     Blocks until Ctrl+C. Refuses to bind 0.0.0.0 (security).

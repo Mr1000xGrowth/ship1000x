@@ -5,6 +5,49 @@ All notable changes to Ship1000x are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] — 2026-05-15 — Local web dashboard MVP
+
+### Added
+- **`ship1000x dashboard` command** : launches a local Flask web app at
+  `http://localhost:10000` with auto-open in browser (opt-out via `--no-open`).
+  Bound to `127.0.0.1` only (refuses external connections), no auth needed
+  (local user), all queries read-only.
+- **Overview page** : 6 metric cards (AI Leverage, Sessions in parallel,
+  Person-days equivalent, Real lines, Total cost, Trust Score) + daily
+  activity trend chart (Chart.js) + Trust Score breakdown per source.
+- **Projects page** : sortable, filterable cross-tab matrix per project ×
+  dominant tool × cost. Footer totals.
+- **JSON API** : `/api/highlights`, `/api/trend`, `/api/projects`, `/api/trust`.
+- **Premium neutral design** : ink/paper palette + ambre accent (aged gold),
+  Inter typography (Linear/Vercel/Stripe reference), hairline borders, no
+  gradients, dark mode auto + manual toggle. Footer signature
+  "Built with ♥ by Mr1000xGrowth".
+- **Window selector** : 7 / 14 / 30 / 60 / 90 / 180 / 365 days, synced via
+  localStorage across pages.
+
+### Tests
+- `tests/test_dashboard_smoke.py` : 7 new tests (app factory + 6 routes).
+- Total : 61 tests pass.
+
+## [0.3.0] — 2026-05-15 — V1.1 quick wins
+
+### Added
+- **`ship1000x pulse` command** : one-line daily check. Shows today's
+  hours + cost + commits + active sources + trend arrow vs 7-day average.
+- **`ship1000x discover --github <owner>`** : queries `gh repo list` and
+  suggests aliases for local project_ids that look like a GitHub repo
+  name. Ready-to-copy YAML snippet output.
+- **`MAX_ACTIVE_SEC_PER_SESSION` configurable** via env var
+  `SHIP1000X_MAX_SESSION_HOURS` (default raised 12h → 16h).
+
+### Documentation
+- `docs/METHODOLOGY.md` adds sections 6.bis (wall_brut × 5 cap) and
+  6.ter (MAX_ACTIVE rationale).
+
+### Tests
+- `tests/test_caps.py` : 7 regression tests on hardcoded caps.
+- Total : 54 tests pass.
+
 ## [0.2.0] — 2026-05-15 — V1 hardening release
 
 ### Added — UX showcase + first-launch experience
