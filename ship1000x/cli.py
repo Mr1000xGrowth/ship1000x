@@ -32,10 +32,23 @@ sys.path.insert(0, str(Path(__file__).parent))
 from ship1000x.core.classifier import Classifier
 from ship1000x.core.storage import Storage
 
-REPO_ROOT = Path(__file__).parent
-DB_PATH = REPO_ROOT / "db" / "tracker.sqlite"
-PROJECTS_CONFIG = REPO_ROOT / "config" / "projects.yaml"
-PRIVACY_CONFIG = REPO_ROOT / "config" / "privacy.yaml"
+# User-facing paths follow the XDG Base Directory spec (Linux) / match
+# equivalents on macOS. Config and data always live in the user home,
+# never inside the installed package (critical for `pip install` users).
+import os as _os
+XDG_CONFIG_HOME = Path(_os.environ.get("XDG_CONFIG_HOME") or (Path.home() / ".config"))
+XDG_DATA_HOME = Path(_os.environ.get("XDG_DATA_HOME") or (Path.home() / ".local" / "share"))
+CONFIG_DIR = XDG_CONFIG_HOME / "ship1000x"
+DATA_DIR = XDG_DATA_HOME / "ship1000x"
+
+REPO_ROOT = Path(__file__).parent  # kept for internal file lookups (bundled templates)
+DB_PATH = DATA_DIR / "tracker.sqlite"
+PROJECTS_CONFIG = CONFIG_DIR / "projects.yaml"
+PRIVACY_CONFIG = CONFIG_DIR / "privacy.yaml"
+
+# Ensure user config/data dirs exist before any command runs.
+CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 console = Console()
 
@@ -337,7 +350,7 @@ def today(compare_modes: bool):
 
 def _print_compare_modes(storage: Storage, day: str) -> None:
     """Affiche les 5 modes de mesure cote-a-cote pour 1 journee."""
-    from ship1000x.core.intervals import get_daily_unified
+    from ship1000x.core.unified_metrics import get_daily_unified
 
     unified = get_daily_unified(storage, day)
     if not unified:
