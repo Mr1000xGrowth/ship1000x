@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Ship1000x{% endblock %}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50:  '#fdf4ff',
+              500: '#a855f7',
+              600: '#9333ea',
+              700: '#7e22ce',
+            }
+          }
+        }
+      }
+    }
+    // Auto dark mode based on system preference
+    if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+      document.documentElement.classList.add('dark');
+    }
+  </script>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; }
+    .metric-card { transition: transform 0.15s ease; }
+    .metric-card:hover { transform: translateY(-2px); }
+  </style>
+</head>
+<body class="bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 min-h-screen">
+
+  <nav class="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-10">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <div class="flex items-center gap-8">
+          <a href="/" class="flex items-center gap-2 font-bold text-lg">
+            <span class="text-brand-600">🚀</span>
+            <span>Ship1000x</span>
+            <span class="text-xs font-normal text-gray-500 dark:text-gray-400 ml-1">dashboard</span>
+          </a>
+          <div class="hidden sm:flex items-center gap-6 text-sm">
+            <a href="/" class="hover:text-brand-600 transition">Overview</a>
+            <a href="/projects" class="hover:text-brand-600 transition">Projects</a>
+          </div>
+        </div>
+        <div class="flex items-center gap-4 text-sm">
+          <select id="window-select" class="bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded px-3 py-1 text-sm">
+            <option value="7">Last 7 days</option>
+            <option value="30" selected>Last 30 days</option>
+            <option value="90">Last 90 days</option>
+            <option value="180">Last 180 days</option>
+          </select>
+          <button onclick="document.documentElement.classList.toggle('dark')" class="text-gray-500 hover:text-brand-600" title="Toggle dark mode">
+            🌓
+          </button>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="text-center text-xs text-gray-500 dark:text-gray-400 py-8 border-t border-gray-200 dark:border-gray-700 mt-16">
+    <div>Ship1000x — local-first AI dev productivity tracker · 100% your data</div>
+    <div class="mt-1">
+      <a href="https://github.com/Mr1000xGrowth/ship1000x" class="hover:text-brand-600">github.com/Mr1000xGrowth/ship1000x</a>
+    </div>
+  </footer>
+
+  <script>
+    // Sync window selector across pages via localStorage
+    const winSel = document.getElementById('window-select');
+    const savedWindow = localStorage.getItem('ship1000x-window') || '30';
+    winSel.value = savedWindow;
+    winSel.addEventListener('change', () => {
+      localStorage.setItem('ship1000x-window', winSel.value);
+      // Trigger page reload data
+      if (typeof reloadData === 'function') reloadData();
+    });
+    window.getWindowDays = () => parseInt(winSel.value, 10);
+  </script>
+
+  {% block scripts %}{% endblock %}
+</body>
+</html>

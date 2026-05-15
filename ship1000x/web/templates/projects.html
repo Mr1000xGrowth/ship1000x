@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+
+{% block title %}Projects · Ship1000x{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+
+  <div>
+    <h1 class="text-3xl font-bold mb-2">Projects</h1>
+    <p class="text-gray-500 dark:text-gray-400 text-sm">
+      <span id="window-label">Last 30 days</span> · sortable, click headers
+    </p>
+  </div>
+
+  <!-- Filter -->
+  <div class="flex gap-3 items-center">
+    <input type="text" id="filter-input" placeholder="Filter by project name…"
+           class="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm w-full max-w-md">
+    <span class="text-sm text-gray-500 dark:text-gray-400" id="result-count">— projects</span>
+  </div>
+
+  <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+    <div class="overflow-x-auto">
+      <table class="min-w-full text-sm">
+        <thead class="bg-gray-50 dark:bg-gray-700 text-gray-700 dark:text-gray-200 uppercase text-xs">
+          <tr>
+            <th class="px-4 py-3 text-left cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600" data-sort="project_id">Project</th>
+            <th class="px-4 py-3 text-right cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600" data-sort="total_hours">Active</th>
+            <th class="px-4 py-3 text-left">Dominant tool</th>
+            <th class="px-4 py-3 text-right cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600" data-sort="sources_ia">Sessions IA</th>
+            <th class="px-4 py-3 text-right cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600" data-sort="commits">Commits</th>
+            <th class="px-4 py-3 text-right cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600" data-sort="total_cost">Cost $</th>
+          </tr>
+        </thead>
+        <tbody id="projects-tbody" class="divide-y divide-gray-200 dark:divide-gray-700">
+          <tr><td colspan="6" class="px-4 py-8 text-center text-gray-500">Loading…</td></tr>
+        </tbody>
+        <tfoot class="bg-gray-50 dark:bg-gray-700 font-semibold">
+          <tr>
+            <td class="px-4 py-3" id="foot-projects">—</td>
+            <td class="px-4 py-3 text-right" id="foot-hours">—</td>
+            <td></td>
+            <td class="px-4 py-3 text-right" id="foot-sessions">—</td>
+            <td class="px-4 py-3 text-right" id="foot-commits">—</td>
+            <td class="px-4 py-3 text-right" id="foot-cost">—</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let projectsData = [];
+let currentSort = { key: 'total_hours', desc: true };
+
+function fmtH(h) {
+  if (!h) return '—';
+  if (h < 1) return Math.round(h * 60) + 'min';
+  return h.toFixed(1) + 'h';
+}
+function fmtCurrency(n) {
+  return '$' + (n || 0).toLocaleString('en-US', {maximumFractionDigits: 2});
+}
+function fmtInt(n) {
+  return (n || 0).toLocaleString('en-US');
+}
+
+function renderRows() {
+  const filter = document.getElementById('filter-input').value.toLowerCase();
+  const rows = projectsData.filter(p => p.project_id.toLowerCase().includes(filter));
+  rows.sort((a, b) => {
+    const va = a[currentSort.key], vb = b[currentSort.key];
+    const r = typeof va === 'string' ? va.localeCompare(vb) : (va || 0) - (vb || 0);
+    return currentSort.desc ? -r : r;
+  });
+
+  const tbody = document.getElementById('projects-tbody');
+  if (rows.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" class="px-4 py-8 text-center text-gray-500">No projects match.</td></tr>';
+  } else {
+    tbody.innerHTML = rows.map(p => `
+      <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+        <td class="px-4 py-2 font-mono text-xs">${p.project_id}</td>
+        <td class="px-4 py-2 text-right font-semibold">${fmtH(p.total_hours)}</td>
+        <td class="px-4 py-2 text-xs">
+          ${p.dominant_tool === 'git only'
+            ? '<span class="text-gray-400">git only</span>'
+            : `<span class="text-brand-600">${p.dominant_tool}</span> <span class="text-gray-400">(${p.dominant_pct}%)</span>`
+          }
+        </td>
+        <td class="px-4 py-2 text-right">${p.sources_ia}</td>
+        <td class="px-4 py-2 text-right">${p.commits}</td>
+        <td class="px-4 py-2 text-right">${fmtCurrency(p.total_cost)}</td>
+      </tr>
+    `).join('');
+  }
+
+  document.getElementById('result-count').textContent = `${rows.length} project${rows.length > 1 ? 's' : ''}`;
+  document.getElementById('foot-projects').textContent = `Total (${rows.length})`;
+  document.getElementById('foot-hours').textContent = fmtH(rows.reduce((s, p) => s + (p.total_hours || 0), 0));
+  document.getElementById('foot-sessions').textContent = fmtInt(rows.reduce((s, p) => s + p.sources_ia, 0));
+  document.getElementById('foot-commits').textContent = fmtInt(rows.reduce((s, p) => s + p.commits, 0));
+  document.getElementById('foot-cost').textContent = fmtCurrency(rows.reduce((s, p) => s + p.total_cost, 0));
+}
+
+async function loadProjects() {
+  const days = window.getWindowDays();
+  document.getElementById('window-label').textContent = `Last ${days} days`;
+  const r = await fetch(`/api/projects?days=${days}`);
+  projectsData = await r.json();
+  renderRows();
+}
+
+document.getElementById('filter-input').addEventListener('input', renderRows);
+document.querySelectorAll('th[data-sort]').forEach(th => {
+  th.addEventListener('click', () => {
+    const key = th.dataset.sort;
+    if (currentSort.key === key) currentSort.desc = !currentSort.desc;
+    else { currentSort.key = key; currentSort.desc = true; }
+    renderRows();
+  });
+});
+
+async function reloadData() {
+  await loadProjects();
+}
+
+loadProjects();
+</script>
+{% endblock %}
