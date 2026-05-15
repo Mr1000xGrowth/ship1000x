@@ -1,5 +1,18 @@
 # Architecture
 
+> **⚠️ STATE : partial — covers v0.1.0 baseline. The V1 hardening release
+> (v0.2.0) added modules not yet documented here :**
+>
+> - `core/cadence.py` — personal P95 threshold computation
+> - `core/unified_metrics.py` — cross-source unified active time +
+>   new `daily_unified` table (5 modes pre-computed per date+machine)
+> - `insights/trust_score.py` — per-source confidence + global composite
+> - `collectors/openclaw.py`, `anthropic_usage.py`, `openai_usage.py`
+>
+> Refer to [`COVERAGE.md`](COVERAGE.md), [`METHODOLOGY.md`](METHODOLOGY.md),
+> and [`TRUST_SCORE.md`](TRUST_SCORE.md) for the V1 specifics. Full
+> ARCHITECTURE update planned for v0.3.0.
+
 ## Overview
 
 Ship1000x is a three-layer tool :

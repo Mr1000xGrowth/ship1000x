@@ -5,7 +5,33 @@ All notable changes to Ship1000x are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] — V1 hardening (2026-05-15)
+## [0.2.0] — 2026-05-15 — V1 hardening release
+
+### Added — UX showcase + first-launch experience
+- **`ship1000x highlights` command** : the WOW pitch in 30 seconds.
+  Audit-ready numbers with explicit confidence labels per metric (Factual /
+  Defensible / Indicative). Trust Score base + bonuses transparently
+  displayed. Wall_clock capped at 5× duration_sec per source (anti-inflation).
+- **First-launch UX** : `ship1000x init` now optionally chains
+  `ingest → rollup → calibrate → highlights` so the user sees value
+  immediately. Each step wrapped in try/except for graceful degradation.
+- **`ship1000x summary` command** : cross-tabulated matrix per project ×
+  tool (dominant tool with %, sessions IA, commits git, cost). Filter by
+  `--client <name>` if projects.yaml has `client:` tags.
+- **`ship1000x today --compare-modes`** : 5 active-time modes side by
+  side (strict 5min / auto P95 / loose 15min / agent IA estimated /
+  wall-clock) with arithmetic verification.
+- **Sessions IA / Commits git split** in `tracker project` table —
+  removes the ambiguity that made days with only git activity look like
+  data was missing.
+
+### Added — Aliases for project consolidation
+- **`projects.yaml > aliases:` map** : merge multiple project_ids into a
+  single canonical id (e.g. local folder name + git remote = one project).
+  Applied transitively up to 5 hops. Resolves the user-reported issue of
+  same logical project being fragmented into 5+ entries.
+- New method `Classifier.resolve_alias()` applied automatically by
+  `classify_session()`.
 
 ### Added — Cost & accuracy fixes
 - **Claude Code SSE chunks dedup** : events `assistant` are now deduplicated
