@@ -79,67 +79,86 @@ def compute_global_score(
     window_days: int = 30,
     user_email: str | None = None,
 ) -> dict:
-    """Composite global score with bonuses and penalties.
+    """Composite global score = raw weighted average per-source.
 
-    Returns dict {score, base, bonus, penalty, breakdown, label}.
-    Capped at [0, 100].
+    Returns {score, label, breakdown, robustness_checks}.
+
+    The score is the weighted average of per-source confidence (0-100). It is
+    NOT inflated by additive bonuses and NOT silently capped — what you see
+    is the raw quality of the underlying data.
+
+    `robustness_checks` are independent qualitative signals about the
+    measurement setup (cadence calibration, cross-source unified merge,
+    critical sources presence). They do NOT alter the score; they tell the
+    reader whether the setup is robust enough to trust the score.
     """
     source_scores = get_all_source_scores(storage, window_days)
     if not source_scores:
         return {
-            "score": 0, "base": 0, "bonus": 0, "penalty": 0,
-            "breakdown": {}, "label": "No data",
+            "score": 0,
+            "label": "No data",
+            "breakdown": {},
+            "robustness_checks": [],
         }
 
-    # Base = weighted average over event count
     weighted_sum = sum(
         s["score"] * s["event_count"] for s in source_scores.values()
     )
     total_events = sum(s["event_count"] for s in source_scores.values())
-    base = weighted_sum // total_events if total_events else 0
+    score = weighted_sum // total_events if total_events else 0
+    label, _ = get_score_label(score)
 
-    # Bonuses
-    bonus = 0
-    bonus_reasons: list[str] = []
+    checks: list[dict] = []
 
-    # +3 if cadence profile calibrated (sample_size >= 100)
+    # Cadence calibrated (P95 personal threshold computed from real data)
+    cadence_passed = False
+    cadence_detail = "Run `ship1000x calibrate` to compute personal P95 threshold"
     if user_email:
         from ship1000x.core.cadence import get_cadence_profile
         prof = get_cadence_profile(storage, user_email)
         if prof and prof.get("sample_size", 0) >= 100:
-            bonus += 3
-            bonus_reasons.append("+3 cadence calibrated")
+            cadence_passed = True
+            p95_min = (prof.get("p95") or 0) / 60
+            cadence_detail = f"P95 = {p95_min:.1f} min (sample {prof['sample_size']})"
+    checks.append({
+        "name": "Cadence calibrated",
+        "passed": cadence_passed,
+        "detail": cadence_detail,
+    })
 
-    # +5 if daily_unified is populated (cross-source merge active)
+    # Cross-source unified merge populated (anti multi-agent overcount)
     with storage.conn() as conn:
         n_unified = conn.execute(
             "SELECT COUNT(*) AS n FROM daily_unified WHERE date >= date('now', ? || ' days')",
             (f"-{window_days}",),
         ).fetchone()["n"]
-    if n_unified > 0:
-        bonus += 5
-        bonus_reasons.append("+5 daily_unified populated")
+    checks.append({
+        "name": "Cross-source unified",
+        "passed": n_unified > 0,
+        "detail": (
+            f"{n_unified} daily rows merged"
+            if n_unified > 0
+            else "Run `ship1000x rollup --since 60d` to populate daily_unified"
+        ),
+    })
 
-    # Penalties
-    penalty = 0
-    penalty_reasons: list[str] = []
-    for critical in CRITICAL_SOURCES:
-        if critical not in source_scores:
-            penalty += 10
-            penalty_reasons.append(f"-10 critical source missing: {critical}")
-
-    final = max(0, min(100, base + bonus - penalty))
-    label, _ = get_score_label(final)
+    # Critical sources present (claude_code + git)
+    missing_critical = sorted(s for s in CRITICAL_SOURCES if s not in source_scores)
+    checks.append({
+        "name": "Critical sources present",
+        "passed": len(missing_critical) == 0,
+        "detail": (
+            f"All present: {', '.join(sorted(CRITICAL_SOURCES))}"
+            if not missing_critical
+            else f"Missing: {', '.join(missing_critical)}"
+        ),
+    })
 
     return {
-        "score": final,
-        "base": base,
-        "bonus": bonus,
-        "penalty": penalty,
-        "bonus_reasons": bonus_reasons,
-        "penalty_reasons": penalty_reasons,
-        "breakdown": source_scores,
+        "score": score,
         "label": label,
+        "breakdown": source_scores,
+        "robustness_checks": checks,
     }
 
 

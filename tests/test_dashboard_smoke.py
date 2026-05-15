@@ -82,9 +82,15 @@ class TestDashboardSmoke(unittest.TestCase):
         data = r.get_json()
         # Must contain these keys
         for key in ("leverage", "parallelism", "days_equivalent", "active_hours",
-                    "lines_real", "cost_total", "trust_score", "trust_base",
-                    "sources_count", "threshold_min", "window_days"):
+                    "lines_real", "cost_total", "trust_score", "trust_label",
+                    "trust_robustness", "sources_count", "threshold_min", "window_days"):
             self.assertIn(key, data, f"missing key in /api/highlights: {key}")
+        # Robustness checks must be a list of {name, passed, detail}
+        self.assertIsInstance(data["trust_robustness"], list)
+        for chk in data["trust_robustness"]:
+            self.assertIn("name", chk)
+            self.assertIn("passed", chk)
+            self.assertIn("detail", chk)
 
     def test_api_trend_returns_list(self):
         client = self._make_client()

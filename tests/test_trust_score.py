@@ -129,7 +129,7 @@ class TestGetAllSourceScores(unittest.TestCase):
 
 
 class TestComputeGlobalScore(unittest.TestCase):
-    """Composite global score with bonuses/penalties."""
+    """Composite global score = raw weighted average + robustness checks."""
 
     def setUp(self):
         self._tmpdir = TemporaryDirectory()
@@ -151,32 +151,59 @@ class TestComputeGlobalScore(unittest.TestCase):
                     (f"{source}-{confidence}-{i}", source, ts, confidence),
                 )
 
+    def _check(self, result: dict, name: str) -> dict:
+        for c in result["robustness_checks"]:
+            if c["name"] == name:
+                return c
+        self.fail(f"robustness check {name!r} not found")
+
     def test_no_data_returns_zero_label(self):
         result = compute_global_score(self.storage)
         self.assertEqual(result["score"], 0)
         self.assertEqual(result["label"], "No data")
+        self.assertEqual(result["robustness_checks"], [])
 
-    def test_critical_sources_penalty(self):
-        """Missing claude_code AND git → -20 penalty."""
-        self._insert("codex", "high", n=10)  # 100 score, but missing critical
-        result = compute_global_score(self.storage)
-        # Base 100, no bonuses (no cadence, no unified), penalty -20
-        self.assertEqual(result["penalty"], 20)
-        self.assertEqual(result["score"], 80)
-
-    def test_critical_sources_present_no_penalty(self):
+    def test_score_is_raw_weighted_average(self):
+        """Score = weighted avg per source — never capped, never inflated."""
         self._insert("claude_code", "high", n=10)
         self._insert("git", "high", n=10)
         result = compute_global_score(self.storage)
-        self.assertEqual(result["penalty"], 0)
-        # Base 100, no bonuses → 100
         self.assertEqual(result["score"], 100)
+        # No additive fields: no base / bonus / penalty in the new shape
+        self.assertNotIn("bonus", result)
+        self.assertNotIn("penalty", result)
+        self.assertNotIn("base", result)
 
-    def test_score_capped_at_100(self):
-        """Even with bonuses, score caps at 100."""
+    def test_weighted_average_mixed_confidence(self):
+        """50% high (100) + 50% medium (70) → average 85."""
+        self._insert("claude_code", "high", n=5)
+        self._insert("claude_code", "medium", n=5)
+        self._insert("git", "high", n=10)
+        result = compute_global_score(self.storage)
+        # 10 events @85 (claude) + 10 events @100 (git) → avg 92
+        self.assertEqual(result["score"], 92)
+
+    def test_critical_sources_check_passes_when_all_present(self):
         self._insert("claude_code", "high", n=10)
         self._insert("git", "high", n=10)
-        # Add daily_unified row to trigger +5 bonus
+        result = compute_global_score(self.storage)
+        chk = self._check(result, "Critical sources present")
+        self.assertTrue(chk["passed"])
+
+    def test_critical_sources_check_fails_when_missing(self):
+        """Missing claude_code AND git → check fails but score is NOT penalized."""
+        self._insert("codex", "high", n=10)
+        result = compute_global_score(self.storage)
+        # Score stays at the raw quality (100) — robustness is reported separately
+        self.assertEqual(result["score"], 100)
+        chk = self._check(result, "Critical sources present")
+        self.assertFalse(chk["passed"])
+        self.assertIn("claude_code", chk["detail"])
+        self.assertIn("git", chk["detail"])
+
+    def test_unified_check_passes_when_populated(self):
+        self._insert("claude_code", "high", n=10)
+        self._insert("git", "high", n=10)
         with self.storage.conn() as c:
             c.execute(
                 """INSERT INTO daily_unified
@@ -184,8 +211,23 @@ class TestComputeGlobalScore(unittest.TestCase):
                    VALUES (date('now'), 'test', '2026-05-15T00:00:00Z')""",
             )
         result = compute_global_score(self.storage)
-        self.assertEqual(result["score"], 100)  # Capped
-        self.assertEqual(result["bonus"], 5)
+        chk = self._check(result, "Cross-source unified")
+        self.assertTrue(chk["passed"])
+
+    def test_unified_check_fails_when_empty(self):
+        self._insert("claude_code", "high", n=10)
+        self._insert("git", "high", n=10)
+        result = compute_global_score(self.storage)
+        chk = self._check(result, "Cross-source unified")
+        self.assertFalse(chk["passed"])
+        self.assertIn("rollup", chk["detail"])
+
+    def test_cadence_check_fails_without_email(self):
+        self._insert("claude_code", "high", n=10)
+        result = compute_global_score(self.storage)
+        chk = self._check(result, "Cadence calibrated")
+        self.assertFalse(chk["passed"])
+        self.assertIn("calibrate", chk["detail"])
 
     def test_breakdown_in_result(self):
         self._insert("claude_code", "high", n=5)

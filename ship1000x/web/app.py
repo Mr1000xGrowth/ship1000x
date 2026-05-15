@@ -142,9 +142,8 @@ def create_app(db_path: Path, config_dir: Path) -> Flask:
             "cost_factual_pct": round(cost_factual_pct, 1),
             "cost_per_line": round(cost_per_line, 4),
             "trust_score": trust["score"],
-            "trust_base": trust.get("base", trust["score"]),
-            "trust_bonus": trust.get("bonus", 0),
             "trust_label": trust["label"],
+            "trust_robustness": trust.get("robustness_checks", []),
             "sources_count": sources_count,
             "threshold_min": round(threshold_min, 1),
         })
