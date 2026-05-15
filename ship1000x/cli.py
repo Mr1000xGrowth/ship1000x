@@ -1698,11 +1698,6 @@ def highlights(since: str):
             (f"-{days}",),
         ).fetchone()
         # Wall_clock summed by source (for "leverage" multiplier - reflects parallelism)
-        wall_brut = conn.execute(
-            "SELECT SUM(wall_clock_sec) AS w FROM events "
-            "WHERE date(started_at) >= date('now', ? || ' days') AND source != 'git'",
-            (f"-{days}",),
-        ).fetchone()["w"] or 0
         # Cost
         cost = conn.execute(
             "SELECT SUM(cost_estimated) AS c FROM events "
@@ -1739,7 +1734,6 @@ def highlights(since: str):
                  AND source IN ('claude_code', 'anthropic_usage', 'openai_usage', 'openclaw', 'web_exports')""",
             (f"-{days}",),
         ).fetchone()["c"] or 0
-    cost_heuristic = max(0, cost - cost_factual)
     cost_factual_pct = (cost_factual / cost * 100) if cost else 0
 
     # Cap wall_brut for sources where wall_clock/duration > 5x (signal "app open without active use")
@@ -1800,7 +1794,7 @@ def highlights(since: str):
     lines.append(f"  [dim]  et {lines_per_hour:.0f} lignes de vrai code défendable.[/dim]")
     lines.append("")
     lines.append(f"  [dim italic]Calculé avec cap_time = {threshold_min:.1f} min (P95 personnel)[/dim italic]")
-    lines.append(f"  [dim italic]Wall_brut capped at 5x duration_sec per source (anti-inflation)[/dim italic]")
+    lines.append("  [dim italic]Wall_brut capped at 5x duration_sec per source (anti-inflation)[/dim italic]")
 
     title = f"🚀 Highlights — derniers {days} jours"
     panel = Panel("\n".join(lines), title=title, border_style="magenta", expand=False)
