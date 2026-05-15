@@ -9,7 +9,7 @@ Codex, Cursor, git, and shell activity — all from your own machine, no SaaS.
 [![CI](https://github.com/Mr1000xGrowth/ship1000x/actions/workflows/test.yml/badge.svg)](https://github.com/Mr1000xGrowth/ship1000x/actions/workflows/test.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-[![Status: Alpha](https://img.shields.io/badge/status-alpha-orange.svg)]()
+[![Status: Beta v0.4.0](https://img.shields.io/badge/status-beta%20v0.4.0-c8a464.svg)]()
 
 ## Why
 
@@ -38,7 +38,7 @@ ship1000x ingest            # first scan of your AI tool logs
 ship1000x today             # see today's activity
 ```
 
-While in alpha (`v0.1.0`), install from source :
+In beta (`v0.4.0`), install from source :
 
 ```bash
 git clone https://github.com/Mr1000xGrowth/ship1000x.git
@@ -219,7 +219,7 @@ ruff check .
 
 ## Roadmap
 
-**v0.1.0** (alpha) — current
+**v0.1.0** — initial alpha (April 2026)
 - [x] 11 collectors (Claude Code, Codex ×3, Cursor, Cline, git, shell, macOS)
 - [x] Multi-machine dedup by commit hash + machine_id
 - [x] Line classification (real / seed / vendored / generated)
@@ -227,7 +227,7 @@ ruff check .
 - [x] S3 push opt-in
 - [x] 40+ CLI commands + Markdown export
 
-**v0.2.0** (this release — V1 hardening)
+**v0.2.0 → v0.4.0** — current beta (V1 hardening + dashboard)
 - [x] Per-project consent wizard (`init` + `projects --select`)
 - [x] Unclassified-projects warning at `daily`
 - [x] Claude Code SSE chunks dedup by message.id (fixes ×2.49 overcount)
@@ -245,16 +245,19 @@ ruff check .
 - [x] Aliases support in `projects.yaml` (merge logically-same projects)
 - [x] CI green on Python 3.10/3.11/3.12 (ubuntu + macos)
 
-**v0.3.0** (next)
-- [ ] Local Flask web dashboard (`ship1000x dashboard` → `localhost:10000`)
-- [ ] PyPI release
-- [ ] GitHub API enrichment (CI status, PR reviews)
-- [ ] Continue.dev, Aider, Antigravity collectors (community welcome)
-- [ ] Better Codex coverage via mac_system focus apps cross-reference
+**v0.5.0** (next)
+- [ ] PyPI release (`pip install ship1000x`)
+- [ ] `tracker explain <metric>` for inline transparency
+- [ ] `tracker reconcile` integrated (Anthropic Admin API cross-check)
+- [ ] PDF export (audit-ready format)
+- [ ] Continue.dev, Aider, Antigravity collectors (community welcome — see [CONTRIBUTING.md](CONTRIBUTING.md))
 
-**v1.0.0** (when stable)
+**v1.0.0** (when stable API)
+- [ ] Plugin system for community-contributed collectors
 - [ ] Packaging as standalone macOS app
 - [ ] Linux distro packages (deb/rpm)
+- [ ] GitHub API enrichment (CI status, PR reviews)
+- [ ] Better Codex coverage via mac_system focus apps cross-reference
 
 ## License
 
