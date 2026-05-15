@@ -20,7 +20,11 @@ from typing import Any
 CODEX_SESSIONS_DIR = Path.home() / ".codex" / "sessions"
 ACTIVE_PAUSE_THRESHOLD_SEC = 5 * 60
 SHORT_APPROVAL_WORDS = 5
-MAX_ACTIVE_SEC_PER_SESSION = 12 * 3600
+import os as _os_max  # noqa
+# Cap per session : protects against 'app left open' aberrations.
+# Override via env var SHIP1000X_MAX_SESSION_HOURS for power users
+# who genuinely run intensive multi-session days (>16h is rare but possible).
+MAX_ACTIVE_SEC_PER_SESSION = int(_os_max.environ.get('SHIP1000X_MAX_SESSION_HOURS', '16')) * 3600
 
 
 def _parse_timestamp(ts: str | None) -> datetime | None:
