@@ -561,7 +561,8 @@ def project(project_id: str, since: str):
         SELECT
             DATE(started_at) AS day,
             SUM(duration_sec) AS active_sec,
-            COUNT(*) AS sessions,
+            SUM(CASE WHEN source != 'git' THEN 1 ELSE 0 END) AS sessions_ia,
+            SUM(CASE WHEN source = 'git' THEN 1 ELSE 0 END) AS commits_git,
             SUM(token_input + token_output) AS tokens,
             SUM(cost_estimated) AS cost
         FROM events
@@ -578,20 +579,26 @@ def project(project_id: str, since: str):
 
     table = Table(title=f"Projet {project_id} — {since}", show_header=True)
     table.add_column("Jour", style="cyan")
-    table.add_column("Temps actif", justify="right")
-    table.add_column("Sessions", justify="right")
+    table.add_column("Actif IA", justify="right")
+    table.add_column("Sessions IA", justify="right")
+    table.add_column("Commits git", justify="right")
     table.add_column("Tokens", justify="right")
     table.add_column("Cout $", justify="right")
 
     total_sec = 0
     total_cost = 0.0
+    total_sessions = 0
+    total_commits = 0
     for r in rows:
         total_sec += r["active_sec"] or 0
         total_cost += r["cost"] or 0.0
+        total_sessions += r["sessions_ia"] or 0
+        total_commits += r["commits_git"] or 0
         table.add_row(
             r["day"],
             _fmt_duration(r["active_sec"] or 0),
-            str(r["sessions"]),
+            str(r["sessions_ia"] or 0),
+            str(r["commits_git"] or 0),
             f"{r['tokens'] or 0:,}",
             f"{r['cost'] or 0:.2f}",
         )
@@ -600,7 +607,8 @@ def project(project_id: str, since: str):
     table.add_row(
         "[bold]Total[/bold]",
         f"[bold]{_fmt_duration(total_sec)}[/bold]",
-        "",
+        f"[bold]{total_sessions}[/bold]",
+        f"[bold]{total_commits}[/bold]",
         "",
         f"[bold]{total_cost:.2f}[/bold]",
     )
