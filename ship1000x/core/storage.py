@@ -8,10 +8,11 @@ from __future__ import annotations
 
 import platform
 import sqlite3
-from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
+
+from ship1000x.core.privacy import sanitize_event
 
 
 def _current_machine_id() -> str:
@@ -107,6 +108,46 @@ CREATE TABLE IF NOT EXISTS users (
     share_opt_in    INTEGER DEFAULT 0,
     created_at      TEXT
 );
+
+CREATE TABLE IF NOT EXISTS user_cadence_profile (
+    user_email      TEXT PRIMARY KEY,
+    p50             INTEGER NOT NULL,
+    p75             INTEGER NOT NULL,
+    p90             INTEGER NOT NULL,
+    p95             INTEGER NOT NULL,
+    p99             INTEGER NOT NULL,
+    sample_size     INTEGER NOT NULL,
+    window_days     INTEGER NOT NULL,
+    computed_at     TEXT NOT NULL
+);
+
+-- Metriques de temps actif UNIFIEES cross-sources (V3).
+-- Une row par (date, machine_id) qui contient les 5 modes calcules en
+-- post-process apres l'agregation par source dans daily_rollup.
+-- Resout le bug multi-agents : si l'user fait Claude Code + Codex + Cursor
+-- en parallele de 10:00 a 10:05, daily_rollup compte 3x5min mais
+-- daily_unified compte 5min (union des events humains cross-sources).
+CREATE TABLE IF NOT EXISTS daily_unified (
+    date                TEXT NOT NULL,
+    machine_id          TEXT NOT NULL DEFAULT 'unknown-machine',
+    user_email          TEXT,
+    -- 4 modes de threshold pour comparaison transparente :
+    active_sec_strict   INTEGER DEFAULT 0,    -- intervalles <= 5min hardcode
+    active_sec_p95      INTEGER DEFAULT 0,    -- intervalles <= P95 du user (cadence)
+    active_sec_loose    INTEGER DEFAULT 0,    -- intervalles <= 15min
+    active_sec_unified  INTEGER DEFAULT 0,    -- = active_sec_p95, alias canonique V1
+    -- Estimations complementaires :
+    agent_sec_estimated INTEGER DEFAULT 0,    -- wall_clock - active_sec_unified (best effort)
+    wall_clock_sec      INTEGER DEFAULT 0,    -- (last_event - first_event) cross-sources
+    -- Audit :
+    threshold_used_sec  INTEGER DEFAULT 0,    -- valeur exacte du seuil P95 utilise
+    sample_size         INTEGER DEFAULT 0,    -- nb intervalles dans le calcul
+    sources_count       INTEGER DEFAULT 0,    -- nb sources distinctes ce jour
+    computed_at         TEXT NOT NULL,
+    PRIMARY KEY (date, machine_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_daily_unified_date ON daily_unified(date);
 """
 
 
@@ -179,7 +220,7 @@ class Storage:
         # Migration daily_rollup : ancien schema PK = (date, project_id, source).
         # Si on detecte ca et qu'on n'a pas encore migre, on recree la table
         # avec PK = (date, project_id, source, machine_id). Les rollups sont
-        # toujours regenerables via `ship1000x rollup` donc on peut dropper sans
+        # toujours regenerables via `tracker rollup` donc on peut dropper sans
         # perte — c'est plus propre qu'un hack qui laisse la vieille PK en place.
         need_rollup_migration = not has_column("daily_rollup", "machine_id")
         if need_rollup_migration:
@@ -214,7 +255,7 @@ class Storage:
                 )
             """)
             # On NE copie PAS les anciennes data : il faut les regenerer via
-            # `ship1000x rollup` pour qu'elles portent machine_id + unique_hashes.
+            # `tracker rollup` pour qu'elles portent machine_id + unique_hashes.
             # L'ancienne table reste disponible en backup si besoin.
 
     def upsert_event(self, event: dict[str, Any], replace: bool = False) -> None:
@@ -225,7 +266,13 @@ class Storage:
         - replace=True : INSERT OR REPLACE. Necessaire pour sessions Claude Code
           multi-jours (un fichier JSONL peut durer plusieurs jours via /compact)
           : on doit pouvoir re-ecraser l'event agrege avec les donnees a jour.
+
+        Garde-fou central : sanitize_event est applique systematiquement, meme
+        si le collector l'a deja appele en amont (idempotent). Garantit qu'aucun
+        event non-filtre n'atteint la DB, y compris en cas de futur collector
+        qui oublierait l'appel.
         """
+        event = sanitize_event(event)
         cols = [
             "id", "source", "event_type", "started_at", "ended_at",
             "duration_sec", "wall_clock_sec", "cwd", "project_id", "project_conf",

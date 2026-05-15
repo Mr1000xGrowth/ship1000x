@@ -15,11 +15,11 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from collections.abc import Iterator
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
+
 
 CLAUDE_CODE_DIR = Path.home() / ".claude" / "projects"
 ACTIVE_PAUSE_THRESHOLD_SEC = 5 * 60  # 5 min entre 2 user events = pause
@@ -41,6 +41,57 @@ class UserEvent:
     msg_type: str  # typed | approval | tool_result | system | paste
     wordcount: int
     paths_touched: list[str] = field(default_factory=list)
+
+
+def _iso_to_epoch_sec(iso_str: str) -> int:
+    """Convertit un timestamp ISO (UTC) en epoch seconds. Defensif : 0 si
+    parse echoue. Utilise pour la timeline markers V4."""
+    try:
+        s = iso_str.strip()
+        if s.endswith("Z"):
+            s = s[:-1] + "+00:00"
+        dt = datetime.fromisoformat(s)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return int(dt.timestamp())
+    except (ValueError, TypeError):
+        return 0
+
+
+# Type codes pour event_timeline (V4). Sync avec rollup._fetch_event_markers.
+_MSG_TYPE_CODES = {
+    "typed": 0,
+    "approval": 1,
+    "paste": 2,
+    "tool_result": 4,
+    "system": 5,
+}
+
+
+def _build_event_timeline(
+    user_events: list[UserEvent],
+    assistant_timestamps: list[str],
+) -> list[list[int]]:
+    """Construit la liste des markers [[epoch, type_code], ...] pour la timeline V4.
+
+    User events : code via _MSG_TYPE_CODES (typed/approval/paste/tool_result/system).
+    Assistant events : tous classes en code 3 (tool_use/output IA).
+    Sortie triee chronologiquement.
+    """
+    out: list[list[int]] = []
+    for ue in user_events:
+        ts = _iso_to_epoch_sec(ue.timestamp)
+        if ts <= 0:
+            continue
+        code = _MSG_TYPE_CODES.get(ue.msg_type, 9)
+        out.append([ts, code])
+    for at in assistant_timestamps:
+        ts = _iso_to_epoch_sec(at)
+        if ts <= 0:
+            continue
+        out.append([ts, 3])
+    out.sort(key=lambda x: x[0])
+    return out
 
 
 @dataclass
@@ -141,16 +192,19 @@ def _parse_timestamp(ts: str | None) -> datetime | None:
 
 
 def _estimate_duration_sec(user_events: list[UserEvent]) -> int:
-    """Calcule le temps actif reel base sur intervalles entre USER events.
+    """Calcule le temps actif EXACT base sur intervalles entre USER events.
 
-    Regles :
-      - intervalle <= 5 min : compte 100% (focus continu certain)
-      - 5-15 min             : compte 50% (pause courte + reflexion probable)
-      - 15-30 min            : compte 25% (pause longue mais Claude reste actif)
-      - > 30 min             : compte 0 (vraie pause / reunion / autre tache)
+    Regle simple :
+      - intervalle <= ACTIVE_PAUSE_THRESHOLD_SEC : compte 100% (focus continu)
+      - intervalle > seuil : 0 (vraie pause)
 
-    L'IA qui reflechit seule pendant 10 min n'ajoute rien car c'est l'ecart
-    entre deux messages USER qui compte, pas les tool_results intercales.
+    Pas de ponderation 50%/25% (heritage approximatif retire 2026-04-25).
+    Le seuil est configurable via slider front-end (cap par event).
+
+    Note : un usage agentique long (Claude code seul 30+ min sans prompt
+    humain) sera mesure comme 0 active dans cette metrique. Pour la
+    "presence active IA-augmentee", utiliser une metrique parallele cote
+    front-end qui inclut les events assistant (code 3).
     """
     if len(user_events) < 2:
         return 0
@@ -165,15 +219,9 @@ def _estimate_duration_sec(user_events: list[UserEvent]) -> int:
             continue
         if prev_ts is not None:
             delta = (ts - prev_ts).total_seconds()
-            if delta <= 0:
-                pass
-            elif delta <= ACTIVE_PAUSE_THRESHOLD_SEC:           # <= 5 min
+            if 0 < delta <= ACTIVE_PAUSE_THRESHOLD_SEC:
                 total_sec += delta
-            elif delta <= ACTIVE_PAUSE_THRESHOLD_SEC * 3:       # 5-15 min
-                total_sec += delta * 0.5
-            elif delta <= ACTIVE_PAUSE_THRESHOLD_SEC * 6:       # 15-30 min
-                total_sec += delta * 0.25
-            # > 30 min : ignore
+            # > seuil : pause, on ne compte pas
         prev_ts = ts
 
     return int(total_sec)
@@ -237,11 +285,16 @@ def parse_session_file(path: Path) -> dict[str, Any]:
     total_tok_out = 0
     total_cost = 0.0
     user_msg_counts = {"typed": 0, "approval": 0, "tool_result": 0, "system": 0, "paste": 0}
+    # Dedup des chunks streaming : Claude Code emet plusieurs records "assistant"
+    # par message (chunks SSE) qui partagent le meme message.id. Sans dedup les
+    # tokens et le cost sont multiplies par ~2.4 en moyenne.
+    seen_msg_ids: set[str] = set()
 
     # Split par jour calendaire (UTC) pour les sessions multi-jours (cas /compact)
     from collections import defaultdict
     daily: dict[str, dict[str, Any]] = defaultdict(lambda: {
         "user_events": [],
+        "assistant_timestamps": [],  # V4 : timestamps assistants pour markers IA
         "tokens_input": 0,
         "tokens_output": 0,
         "cost": 0.0,
@@ -250,6 +303,9 @@ def parse_session_file(path: Path) -> dict[str, Any]:
         "first_ts": None,
         "last_ts": None,
         "tool_paths": [],  # paths touches ce jour, pour split multi-projets
+        # V5 model stats : breakdown par modele LLM utilise sur la journee.
+        # model_stats: { "claude-opus-4.7": {tokens_in, tokens_out, cost, turns}, ... }
+        "model_stats": {},
     })
 
     try:
@@ -298,18 +354,36 @@ def parse_session_file(path: Path) -> dict[str, Any]:
 
                 elif rec_type == "assistant":
                     msg = record.get("message", {}) or {}
+                    msg_id = msg.get("id")
+                    if msg_id:
+                        if msg_id in seen_msg_ids:
+                            continue
+                        seen_msg_ids.add(msg_id)
                     model = msg.get("model") or record.get("model") or "default"
                     usage = msg.get("usage", {}) or {}
                     tin = usage.get("input_tokens", 0) or 0
                     tout = usage.get("output_tokens", 0) or 0
-                    total_tok_in += tin
+                    cache_read = usage.get("cache_read_input_tokens", 0) or 0
+                    cache_create = usage.get("cache_creation_input_tokens", 0) or 0
+                    total_tok_in += tin + cache_read + cache_create
                     total_tok_out += tout
-                    cost_here = _estimate_cost(model, tin, tout)
+                    cost_here = _estimate_cost(model, tin, tout, cache_read, cache_create)
                     total_cost += cost_here
-                    d["tokens_input"] += tin
+                    d["tokens_input"] += tin + cache_read + cache_create
                     d["tokens_output"] += tout
                     d["cost"] += cost_here
                     d["assistant_turns"] += 1
+                    if ts:
+                        d["assistant_timestamps"].append(ts)
+                    # V5 : tracker le modele utilise pour ce turn
+                    ms = d["model_stats"].setdefault(
+                        model,
+                        {"tokens_in": 0, "tokens_out": 0, "cost": 0.0, "turns": 0},
+                    )
+                    ms["tokens_in"] += tin + cache_read + cache_create
+                    ms["tokens_out"] += tout
+                    ms["cost"] += cost_here
+                    ms["turns"] += 1
 
                     tool_uses = []
                     content = msg.get("content")
@@ -369,7 +443,8 @@ def iter_session_files(projects_dir: Path = CLAUDE_CODE_DIR) -> Iterator[Path]:
     """Yield tous les fichiers JSONL sous ~/.claude/projects/."""
     if not projects_dir.exists():
         return
-    yield from projects_dir.glob("*/*.jsonl")
+    for jsonl in projects_dir.glob("*/*.jsonl"):
+        yield jsonl
 
 
 def collect(storage, classifier, privacy_config: dict[str, Any]) -> dict[str, int]:
@@ -446,6 +521,13 @@ def collect(storage, classifier, privacy_config: dict[str, Any]) -> dict[str, in
                 distribution = {project_id or "unclassified": 1.0}
 
             total_wc = sum(e.wordcount for e in d["user_events"])
+            # V4 : timeline markers complete pour le session_day.
+            # Partagee par tous les sous-events split par projet (ratio) : on
+            # ne la prorate pas (c'est la meme timeline source, le split
+            # projet est fait cote lecture dashboard).
+            full_timeline = _build_event_timeline(
+                d["user_events"], d.get("assistant_timestamps") or []
+            )
             for pid, ratio in distribution.items():
                 event_id = _stable_event_id(
                     "claude_code", file_key, 0, f"{day_key}|{pid}"
@@ -474,6 +556,19 @@ def collect(storage, classifier, privacy_config: dict[str, Any]) -> dict[str, in
                         "session_id": parsed["session_id"],
                         "split_ratio": round(ratio, 3),
                         "primary_project": project_id,
+                        # V4 : timeline markers pour vue debug / cap configurable
+                        "event_timeline": full_timeline,
+                        # V5 : breakdown par modele LLM (tokens / cost / turns)
+                        # Proratise par ratio pour coherence avec duration/cost
+                        "model_stats": {
+                            m: {
+                                "tokens_in": int(s["tokens_in"] * ratio),
+                                "tokens_out": int(s["tokens_out"] * ratio),
+                                "cost": s["cost"] * ratio,
+                                "turns": int(s["turns"] * ratio),
+                            }
+                            for m, s in d["model_stats"].items()
+                        },
                     }),
                 }
                 safe = sanitize_event(event)

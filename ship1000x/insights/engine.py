@@ -1,8 +1,8 @@
 """Engine — queries agregats de base pour tous les insights.
 
 Toutes les fonctions retournent des dicts/lists Python standards pour etre
-facilement consommees par le CLI, le rapport Markdown, le PDF, ou une
-API externe.
+facilement consommees par le CLI, le rapport Markdown, le PDF, ou un
+backend dashboard externe (advanced).
 
 Convention : `storage` est une instance Storage (core.storage). Les filtres
 `project` (optionnel) et `since`/`until` (datetime) sont partout supportes.
@@ -114,22 +114,43 @@ def get_msg_counts(storage, window: Window) -> dict[str, int]:
 
 
 def get_git_stats(storage, window: Window) -> dict[str, int]:
-    """Agrege lignes +/- / commits / files via raw_meta des events source=git."""
+    """Agrege lignes +/- / commits / files via raw_meta des events source=git.
+
+    Retourne :
+      - lines_added / lines_deleted : somme BRUTE (toutes categories confondues)
+      - lines_real_added / lines_real_deleted : code SOURCE manuel (sans seed,
+        vendored, generated). C'est la mesure defendable de productivite.
+      - lines_{seed,vendored,generated}_{added,deleted} : breakdown V2.
+      - commits, files_changed : totaux.
+
+    Les categories sont calculees par core.line_classifier au moment du
+    commit git (analyse des paths : vendored=node_modules/, generated=*.lock,
+    seed=fichiers initiaux d'un commit "init", real=tout le reste).
+    """
     where, params = _where_project(window)
     rows = storage.query(
         f"""SELECT raw_meta FROM events
              WHERE source = 'git' AND raw_meta IS NOT NULL AND {where}""",
         params,
     )
-    stats = {"commits": len(rows), "lines_added": 0, "lines_deleted": 0, "files_changed": 0}
+    stats = {
+        "commits": len(rows),
+        "lines_added": 0, "lines_deleted": 0,
+        "lines_real_added": 0, "lines_real_deleted": 0,
+        "lines_seed_added": 0, "lines_seed_deleted": 0,
+        "lines_vendored_added": 0, "lines_vendored_deleted": 0,
+        "lines_generated_added": 0, "lines_generated_deleted": 0,
+        "files_changed": 0,
+    }
     for r in rows:
         try:
             meta = json.loads(r["raw_meta"] or "{}")
         except (json.JSONDecodeError, TypeError):
             continue
-        stats["lines_added"] += meta.get("lines_added", 0) or 0
-        stats["lines_deleted"] += meta.get("lines_deleted", 0) or 0
-        stats["files_changed"] += meta.get("files_changed", 0) or 0
+        for k in stats:
+            if k == "commits":
+                continue
+            stats[k] += meta.get(k, 0) or 0
     return stats
 
 
@@ -266,14 +287,28 @@ def compute_overview(storage, window: Window) -> dict[str, Any]:
     tokens = get_total_tokens(storage, window)
     cost = get_total_cost(storage, window)
 
-    # Ratios-cles
+    # Ratios-cles. Les ratios "productivite" utilisent lines_real_added
+    # (vrai code ecrit, sans vendored/generated/seed) pour etre defendables.
+    # Les ratios "raw" utilisent lines_added BRUT (retro-compat dashboard).
+    real_added = git["lines_real_added"]
+    real_deleted = git["lines_real_deleted"]
+    real_net = real_added - real_deleted
+    raw_net = git["lines_added"] - git["lines_deleted"]
+
     ratios: dict[str, float | None] = {}
     typed = msg_counts["typed"]
-    ratios["lines_per_hour"] = (git["lines_added"] / active_hours) if active_hours else None
+    # Defendables (real) :
+    ratios["lines_per_hour"] = (real_added / active_hours) if active_hours else None
+    ratios["lines_per_typed"] = (real_added / typed) if typed else None
+    ratios["cost_per_line_net"] = (cost / real_net) if real_net > 0 else None
+    # Bruts (retro-compat — utiles pour mesurer l'output total y compris vendored) :
+    ratios["lines_per_hour_raw"] = (git["lines_added"] / active_hours) if active_hours else None
+    ratios["lines_per_typed_raw"] = (git["lines_added"] / typed) if typed else None
+    ratios["cost_per_line_net_raw"] = (cost / raw_net) if raw_net > 0 else None
+    # Inchanges :
     ratios["typed_per_hour"] = (typed / active_hours) if active_hours else None
     ratios["tokens_per_hour"] = (tokens["total"] / active_hours) if active_hours else None
     ratios["commits_per_hour"] = (git["commits"] / active_hours) if active_hours else None
-    ratios["lines_per_typed"] = (git["lines_added"] / typed) if typed else None
     ratios["tool_per_typed"] = (msg_counts["tool_result"] / typed) if typed else None
     ratios["approval_ratio"] = (
         msg_counts["approval"] / (typed + msg_counts["approval"])
@@ -281,9 +316,6 @@ def compute_overview(storage, window: Window) -> dict[str, Any]:
         else None
     )
     ratios["cost_per_commit"] = (cost / git["commits"]) if git["commits"] else None
-    ratios["cost_per_line_net"] = (
-        cost / max(1, git["lines_added"] - git["lines_deleted"])
-    ) if (git["lines_added"] - git["lines_deleted"]) > 0 else None
     ratios["cost_per_hour"] = (cost / active_hours) if active_hours else None
 
     return {
@@ -304,6 +336,15 @@ def compute_overview(storage, window: Window) -> dict[str, Any]:
             "commits": git["commits"],
             "lines_added": git["lines_added"],
             "lines_deleted": git["lines_deleted"],
+            # V2 breakdown par categorie (real est la mesure defendable) :
+            "lines_real_added": git["lines_real_added"],
+            "lines_real_deleted": git["lines_real_deleted"],
+            "lines_seed_added": git["lines_seed_added"],
+            "lines_seed_deleted": git["lines_seed_deleted"],
+            "lines_vendored_added": git["lines_vendored_added"],
+            "lines_vendored_deleted": git["lines_vendored_deleted"],
+            "lines_generated_added": git["lines_generated_added"],
+            "lines_generated_deleted": git["lines_generated_deleted"],
             "files_changed": git["files_changed"],
             "tokens_input": tokens["input"],
             "tokens_output": tokens["output"],

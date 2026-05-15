@@ -22,9 +22,12 @@ from ship1000x.insights.engine import (
     compute_overview,
     get_active_sec_by_day,
     get_consecutive_active_days,
+    get_night_active_pct,
+    get_sessions_long,
 )
 from ship1000x.insights.multiplier import compute_multiplier
 from ship1000x.insights.signals import (
+    compute_all_signals,
     detect_blocages,
     detect_burnout,
 )
@@ -89,14 +92,22 @@ class TestEngineOverview(unittest.TestCase):
         s = _make_storage()
         ts = datetime.now(timezone.utc) - timedelta(hours=2)
         _insert_event(s, started_at=ts.isoformat(), duration_sec=3600)
-        # Ajout d'un event git avec raw_meta
+        # Event git avec raw_meta V2 : breakdown real / vendored / generated.
+        # Sur 500 lignes brutes : 400 real, 80 vendored, 20 generated.
+        # Les ratios "productivite" se basent sur lines_real_added (defendable).
         _insert_event(
             s,
             source="git",
             event_type="commit",
             started_at=ts.isoformat(),
             duration_sec=0,
-            raw_meta=json.dumps({"lines_added": 500, "lines_deleted": 10, "files_changed": 3}),
+            raw_meta=json.dumps({
+                "lines_added": 500, "lines_deleted": 10, "files_changed": 3,
+                "lines_real_added": 400, "lines_real_deleted": 8,
+                "lines_vendored_added": 80, "lines_vendored_deleted": 0,
+                "lines_generated_added": 20, "lines_generated_deleted": 2,
+                "lines_seed_added": 0, "lines_seed_deleted": 0,
+            }),
             project_id="test",
         )
         w = Window(
@@ -108,10 +119,15 @@ class TestEngineOverview(unittest.TestCase):
         self.assertEqual(ov["totals"]["typed"], 10)
         self.assertEqual(ov["totals"]["commits"], 1)
         self.assertEqual(ov["totals"]["lines_added"], 500)
-        # Ratios
-        self.assertAlmostEqual(ov["ratios"]["lines_per_hour"], 500, places=0)
+        self.assertEqual(ov["totals"]["lines_real_added"], 400)
+        # Ratios productivite (real-based) :
+        self.assertAlmostEqual(ov["ratios"]["lines_per_hour"], 400, places=0)
+        self.assertAlmostEqual(ov["ratios"]["lines_per_typed"], 40, places=0)
+        # Ratios bruts (retro-compat dashboard) :
+        self.assertAlmostEqual(ov["ratios"]["lines_per_hour_raw"], 500, places=0)
+        self.assertAlmostEqual(ov["ratios"]["lines_per_typed_raw"], 50, places=0)
+        # Inchanges :
         self.assertAlmostEqual(ov["ratios"]["typed_per_hour"], 10, places=0)
-        self.assertAlmostEqual(ov["ratios"]["lines_per_typed"], 50, places=0)
         self.assertAlmostEqual(ov["ratios"]["tool_per_typed"], 8.0, places=1)
 
 

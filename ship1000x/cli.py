@@ -1,19 +1,22 @@
 #!/usr/bin/env python3
 """Ship1000x — CLI entrypoint.
 
+Local-first AI dev productivity tracker.
+
 Usage:
-    ship1000x ingest                      # collecte toutes les sources
-    ship1000x today                       # resume aujourd'hui
-    ship1000x week                        # 7 derniers jours
-    ship1000x project <id>                # detail projet
-    ship1000x project <id> --since 30d    # fenetre custom
-    ship1000x init                        # premiere config (TBD)
-    tracker privacy                     # affiche config privacy (TBD)
+    tracker ingest                      # collect from all sources
+    tracker today                       # today's summary
+    tracker today --compare-modes       # compare 5 active-time modes
+    tracker week                        # last 7 days
+    tracker project <id>                # project detail
+    tracker project <id> --since 30d    # custom window
+    tracker calibrate                   # personal cadence profile (P95 threshold)
+    tracker init                        # interactive setup wizard
+    tracker privacy                     # show privacy config
 """
 
 from __future__ import annotations
 
-import os
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -26,25 +29,14 @@ from rich.table import Table
 # Permet d'importer core/ / collectors/ depuis la racine du projet
 sys.path.insert(0, str(Path(__file__).parent))
 
-from ship1000x.core.classifier import Classifier
 from ship1000x.core.storage import Storage
+from ship1000x.core.classifier import Classifier
 
-# User-facing paths follow the XDG Base Directory spec (Linux) / match
-# equivalents on macOS. Config and data always live in the user home,
-# never inside the installed package (critical for `pip install` users).
-XDG_CONFIG_HOME = Path(os.environ.get("XDG_CONFIG_HOME") or (Path.home() / ".config"))
-XDG_DATA_HOME = Path(os.environ.get("XDG_DATA_HOME") or (Path.home() / ".local" / "share"))
-CONFIG_DIR = XDG_CONFIG_HOME / "ship1000x"
-DATA_DIR = XDG_DATA_HOME / "ship1000x"
 
-REPO_ROOT = Path(__file__).parent  # kept for internal file lookups (bundled templates)
-DB_PATH = DATA_DIR / "tracker.sqlite"
-PROJECTS_CONFIG = CONFIG_DIR / "projects.yaml"
-PRIVACY_CONFIG = CONFIG_DIR / "privacy.yaml"
-
-# Ensure user config/data dirs exist before any command runs.
-CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-DATA_DIR.mkdir(parents=True, exist_ok=True)
+REPO_ROOT = Path(__file__).parent
+DB_PATH = REPO_ROOT / "db" / "tracker.sqlite"
+PROJECTS_CONFIG = REPO_ROOT / "config" / "projects.yaml"
+PRIVACY_CONFIG = REPO_ROOT / "config" / "privacy.yaml"
 
 console = Console()
 
@@ -96,9 +88,19 @@ def _fmt_duration(sec: int) -> str:
     return f"{minutes}m"
 
 
+def _get_user_email() -> str | None:
+    """Lit le user_email depuis privacy.yaml (consent.user_email).
+
+    Necessaire pour la calibration cadence (P95 personnel) et l'attribution
+    des metriques unifiees. Returns None si privacy.yaml absent ou champ vide.
+    """
+    cfg = _load_yaml(PRIVACY_CONFIG)
+    return (cfg.get("consent") or {}).get("user_email") or None
+
+
 @click.group()
 def cli():
-    """Ship1000x — tracker IA-native local-first."""
+    """Ship1000x — local-first AI dev productivity tracker."""
     pass
 
 
@@ -132,6 +134,39 @@ def ingest(source: str):
             total_stats[k] = total_stats.get(k, 0) + v
         console.print(f"  → {stats['sessions_ingested']} sessions, {stats['files_seen']} fichiers scannes")
 
+    if source in ("all", "openclaw") and _src_enabled("openclaw"):
+        console.print("[cyan]Collecting OpenClaw gateway sessions...[/cyan]")
+        from collectors import openclaw
+        stats = openclaw.collect(storage, classifier, privacy_config)
+        for k, v in stats.items():
+            total_stats[k] = total_stats.get(k, 0) + v
+        console.print(
+            f"  → {stats['sessions_ingested']} sessions OpenClaw "
+            f"({stats['files_parsed']}/{stats['files_seen']} fichiers parses)"
+        )
+
+    if source in ("all", "anthropic_usage") and _src_enabled("anthropic_usage", _DEFAULT_DISABLED):
+        console.print("[cyan]Fetching Anthropic billing usage (Admin API)...[/cyan]")
+        from collectors import anthropic_usage
+        stats = anthropic_usage.collect(storage, classifier, privacy_config)
+        for k, v in stats.items():
+            total_stats[k] = total_stats.get(k, 0) + v
+        console.print(
+            f"  → {stats['events_ingested']} events Anthropic billing "
+            f"({stats['files_parsed']}/{stats['files_seen']} buckets)"
+        )
+
+    if source in ("all", "openai_usage") and _src_enabled("openai_usage", _DEFAULT_DISABLED):
+        console.print("[cyan]Fetching OpenAI billing usage (Admin API)...[/cyan]")
+        from collectors import openai_usage
+        stats = openai_usage.collect(storage, classifier, privacy_config)
+        for k, v in stats.items():
+            total_stats[k] = total_stats.get(k, 0) + v
+        console.print(
+            f"  → {stats['events_ingested']} events OpenAI billing "
+            f"({stats['files_parsed']}/{stats['files_seen']} buckets)"
+        )
+
     if source in ("all", "codex") and _src_enabled("codex"):
         console.print("[cyan]Collecting Codex sessions...[/cyan]")
         from collectors import codex
@@ -140,8 +175,16 @@ def ingest(source: str):
             total_stats[k] = total_stats.get(k, 0) + v
         console.print(f"  → {stats['sessions_ingested']} sessions, {stats['files_seen']} fichiers scannes")
 
-    if source in ("all", "cursor") and _src_enabled("cursor"):
-        console.print("[cyan]Collecting Cursor tracking DB...[/cyan]")
+    # Cursor : collector deferre V1.1.
+    # state.vscdb fait ~10 GB et le parsing complet (composer bubbles + tokens)
+    # exigerait ~1j de dev pour gain marginal. Le collector existe (collectors/cursor.py)
+    # mais n'est pas wire dans `tracker ingest` par defaut. Activable explicitement
+    # via privacy.yaml: sources.cursor.enabled = true (advanced users).
+    if source == "cursor":
+        console.print("[yellow]Cursor collector deferre V1.1[/yellow] — see docs/COVERAGE.md")
+        console.print("[dim]  Activable via privacy.yaml: sources.cursor.enabled = true[/dim]")
+    elif source == "all" and _src_enabled("cursor", _DEFAULT_DISABLED):
+        console.print("[cyan]Collecting Cursor (advanced opt-in)...[/cyan]")
         from collectors import cursor
         stats = cursor.collect(storage, classifier, privacy_config)
         for k, v in stats.items():
@@ -221,7 +264,7 @@ def ingest(source: str):
         )
 
     console.print()
-    console.print("[green]✓[/green] Ingestion terminee")
+    console.print(f"[green]✓[/green] Ingestion terminee")
     console.print(f"  Sessions : {total_stats['sessions_ingested']}")
     console.print(f"  Events   : {total_stats['events_ingested']}")
     if total_stats["skipped"]:
@@ -229,10 +272,16 @@ def ingest(source: str):
 
 
 @cli.command()
-def today():
+@click.option("--compare-modes", is_flag=True,
+              help="Compare les 5 modes de mesure du temps actif (strict/auto P95/loose + agent IA + wall-clock)")
+def today(compare_modes: bool):
     """Resume du jour : heures par projet."""
     storage = _get_storage()
     today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+
+    if compare_modes:
+        _print_compare_modes(storage, today_start.date().isoformat())
+        return
 
     rows = storage.query(
         """
@@ -251,8 +300,8 @@ def today():
     )
 
     if not rows:
-        console.print("[yellow]Aucune activite trackee aujourd'hui.[/yellow]")
-        console.print("  Lance [cyan]ship1000x ingest[/cyan] pour collecter les sessions.")
+        console.print(f"[yellow]Aucune activite trackee aujourd'hui.[/yellow]")
+        console.print(f"  Lance [cyan]tracker ingest[/cyan] pour collecter les sessions.")
         return
 
     table = Table(title=f"Aujourd'hui ({today_start.date()})", show_header=True)
@@ -287,6 +336,152 @@ def today():
     console.print(table)
 
 
+def _print_compare_modes(storage: Storage, day: str) -> None:
+    """Affiche les 5 modes de mesure cote-a-cote pour 1 journee."""
+    from ship1000x.core.intervals import get_daily_unified
+
+    unified = get_daily_unified(storage, day)
+    if not unified:
+        console.print(f"[yellow]Aucune metrique unifiee pour {day}.[/yellow]")
+        console.print(f"  Lance [cyan]tracker rollup --since 7d[/cyan] pour recalculer.")
+        return
+
+    threshold = unified["threshold_used_sec"]
+    threshold_min = threshold / 60
+    is_fallback = threshold == 5 * 60 and unified["sample_size"] < 100
+
+    console.print()
+    console.print(f"[bold]Modes compares — {day}[/bold]")
+    console.print(f"[dim]({unified['sample_size']} events humains, "
+                  f"{unified['sources_count']} source(s) distincte(s), "
+                  f"machine={unified['machine_id']})[/dim]")
+    console.print()
+
+    table = Table(show_header=True, show_lines=False)
+    table.add_column("Mode", style="cyan")
+    table.add_column("Threshold", justify="right")
+    table.add_column("Duree", justify="right", style="bold")
+    table.add_column("Note")
+
+    table.add_section()
+    table.add_row("[dim]ACTIF HUMAIN[/dim]", "", "", "")
+    table.add_row("  strict (5min)", "5.0 min",
+                  _fmt_duration(unified["active_sec_strict"]),
+                  "[dim]conservateur, hardcode[/dim]")
+    p95_label = "auto P95"
+    if is_fallback:
+        p95_label += " [yellow](fallback strict)[/yellow]"
+    table.add_row(f"  {p95_label}", f"{threshold_min:.1f} min",
+                  _fmt_duration(unified["active_sec_p95"]),
+                  "[green]applique[/green]" if not is_fallback else "[yellow]calibration en cours[/yellow]")
+    table.add_row("  loose (15min)", "15.0 min",
+                  _fmt_duration(unified["active_sec_loose"]),
+                  "[dim]genereux[/dim]")
+
+    table.add_section()
+    table.add_row("[dim]AGENT IA (estime)[/dim]", "", "", "")
+    table.add_row("  travail autonome IA", "—",
+                  _fmt_duration(unified["agent_sec_estimated"]),
+                  "[dim]wall - actif humain auto[/dim]")
+
+    table.add_section()
+    table.add_row("[dim]TOTAL[/dim]", "", "", "")
+    table.add_row("  wall-clock", "—",
+                  _fmt_duration(unified["wall_clock_sec"]),
+                  "[dim]premier → dernier event[/dim]")
+
+    console.print(table)
+
+    # Verification arithmetique
+    expected_wall = unified["active_sec_p95"] + unified["agent_sec_estimated"]
+    delta = unified["wall_clock_sec"] - expected_wall
+    if abs(delta) <= 1:
+        console.print(f"[green]Verification :[/green] actif humain auto + agent IA = wall-clock ✓")
+    else:
+        console.print(f"[yellow]Verification :[/yellow] ecart {delta} sec entre somme et wall-clock")
+
+    if is_fallback:
+        console.print()
+        console.print("[yellow]Threshold P95 non calibre[/yellow] — utilise le fallback strict (5min).")
+        console.print(f"  Lance [cyan]tracker calibrate[/cyan] quand tu auras 100+ events humains "
+                      f"(actuellement {unified['sample_size']}).")
+
+
+@cli.command()
+@click.option("--window", default=14, type=int,
+              help="Fenetre de calibration en jours (defaut 14)")
+@click.option("--user", default=None, help="user_email (defaut : lu depuis privacy.yaml)")
+def calibrate(window: int, user: str | None):
+    """Calibre le profil de cadence personnel (percentiles P50-P99 du user).
+
+    Utilise par le mode AUTO P95 dans le calcul du temps actif unifie.
+    Adaptatif : un dev calme aura un threshold ~5 min, un power user
+    multi-agents un threshold ~10-15 min — chacun vu correctement.
+    """
+    from ship1000x.core.cadence import refresh_user_cadence
+
+    user_email = user or _get_user_email()
+    if not user_email:
+        console.print("[red]user_email manquant.[/red]")
+        console.print("  Defini dans config/privacy.yaml :")
+        console.print("    consent:")
+        console.print("      user_email: ton@email.com")
+        console.print("  Ou utilise --user ton@email.com")
+        return
+
+    storage = _get_storage()
+    console.print(f"[cyan]Calibration[/cyan] pour {user_email} sur {window} jours...")
+    profile = refresh_user_cadence(storage, user_email, window_days=window)
+
+    if not profile:
+        console.print(f"[yellow]Pas assez de data pour calibrer[/yellow] (< 50 intervalles).")
+        console.print(f"  Lance [cyan]tracker daily[/cyan] regulierement pour accumuler.")
+        return
+
+    console.print()
+    table = Table(title=f"Profil cadence — {user_email}", show_header=True)
+    table.add_column("Percentile", style="cyan")
+    table.add_column("Valeur", justify="right", style="bold")
+    table.add_column("Interpretation")
+
+    rows = [
+        ("P50 (mediane)", profile["p50"], "moitie de tes intervalles font <= ca"),
+        ("P75",            profile["p75"], "75% des intervalles"),
+        ("P90",            profile["p90"], "90% des intervalles"),
+        ("P95",            profile["p95"], "[bold green]threshold AUTO applique[/bold green]"),
+        ("P99",            profile["p99"], "vraies pauses au-dela"),
+    ]
+    for label, val, note in rows:
+        mins = val / 60
+        table.add_row(label, f"{val} sec ({mins:.1f} min)", note)
+    console.print(table)
+
+    console.print()
+    console.print(f"[dim]Sample size : {profile['sample_size']} intervalles "
+                  f"sur {profile['window_days']} jours[/dim]")
+    console.print(f"[dim]Calcule a {profile['computed_at']}[/dim]")
+    console.print()
+
+    # Recommandations contextuelles selon le profil
+    p95_min = profile["p95"] / 60
+    if p95_min < 4:
+        console.print("[bold]Profil[/bold] : dev intensif/concentre (intervalles courts entre prompts)")
+    elif p95_min < 8:
+        console.print("[bold]Profil[/bold] : dev classique (rythme regulier)")
+    elif p95_min < 15:
+        console.print("[bold]Profil[/bold] : power user multi-agents (intervalles longs entre interactions)")
+    else:
+        console.print("[bold]Profil[/bold] : sessions tres etalees (pauses cafe naturelles incluses)")
+
+    console.print()
+    console.print(f"  Le threshold P95 ({p95_min:.1f} min) sera utilise dans les modes :")
+    console.print(f"    [cyan]tracker today --compare-modes[/cyan]")
+    console.print(f"    [cyan]tracker rollup[/cyan] (rebuild des daily_unified)")
+    console.print()
+    console.print(f"  Override possible :")
+    console.print(f"    [cyan]tracker today --compare-modes[/cyan] (voir les 5 modes cote-a-cote)")
+
+
 @cli.command()
 def week():
     """Resume 7 derniers jours."""
@@ -309,7 +504,7 @@ def week():
     )
 
     if not rows:
-        console.print("[yellow]Aucune activite trackee sur 7 jours.[/yellow]")
+        console.print(f"[yellow]Aucune activite trackee sur 7 jours.[/yellow]")
         return
 
     table = Table(title=f"7 derniers jours ({week_start.date()} → aujourd'hui)", show_header=True)
@@ -457,13 +652,13 @@ def _run_projects_select() -> None:
     consent = privacy_config.get("consent") or {}
     if not consent.get("signed_at"):
         console.print(
-            "[red]✗[/red] Consent non signe. Lance [cyan]ship1000x init[/cyan] d'abord."
+            "[red]✗[/red] Consent non signe. Lance [cyan]tracker init[/cyan] d'abord."
         )
         return
 
-    share_cloud = bool(consent.get("share_cloud", False))
+    cloud_sync = bool(consent.get("cloud_sync", False))
     current_share = privacy_config.get("share") or {}
-    current_share.setdefault("_default", "aggregated" if share_cloud else "private")
+    current_share.setdefault("_default", "aggregated" if cloud_sync else "private")
 
     storage = _get_storage()
     db_projects = collect_db_projects(storage)
@@ -473,12 +668,12 @@ def _run_projects_select() -> None:
 
     if not projects_list:
         console.print(
-            "[yellow]Aucun projet connu. Lance [cyan]ship1000x ingest[/cyan] d'abord.[/yellow]"
+            "[yellow]Aucun projet connu. Lance [cyan]tracker ingest[/cyan] d'abord.[/yellow]"
         )
         return
 
     new_share = prompt_share_levels(
-        projects_list, current_share, console, share_cloud=share_cloud
+        projects_list, current_share, console, share_cloud=cloud_sync
     )
 
     privacy_config["share"] = new_share
@@ -508,9 +703,9 @@ def setup(ctx: click.Context, skip_push: bool):
 
     Idempotent : relancer la commande est sans risque. Les etapes deja
     effectuees (consent signe) sont skippees. Utile pour onboarding
-    en une seule commande copy-paste sans commentaires shell.
+    rapide et copy-paste en un bloc sans commentaires shell.
     """
-    console.print("[bold cyan]═══ ship1000x setup ═══[/bold cyan]")
+    console.print("[bold cyan]═══ tracker setup ═══[/bold cyan]")
     console.print()
 
     # Étape 0 — Auto-migration du privacy.yaml existant (silencieux, idempotent)
@@ -547,7 +742,7 @@ def setup(ctx: click.Context, skip_push: bool):
         console.print("[green]✓[/green] [2/4] Ingest OK")
     except Exception as e:
         console.print(f"[red]✗[/red] [2/4] Ingest a echoue : {e}")
-        console.print("[yellow]Setup stoppe. Corrige puis relance ship1000x setup.[/yellow]")
+        console.print("[yellow]Setup stoppe. Corrige puis relance tracker setup.[/yellow]")
         return
     console.print()
 
@@ -565,13 +760,13 @@ def setup(ctx: click.Context, skip_push: bool):
     cloud = privacy_config.get("cloud") or {}
     if skip_push:
         console.print("[yellow]⊘[/yellow] [4/4] Push skip (flag --skip-push)")
-    elif not (consent.get("share_cloud") and cloud.get("push_enabled")):
+    elif not (consent.get("cloud_sync") and cloud.get("push_enabled")):
         # Re-lire privacy au cas ou init vient de le mettre a jour
         privacy_config = _load_yaml(PRIVACY_CONFIG) if PRIVACY_CONFIG.exists() else {}
         consent2 = privacy_config.get("consent") or {}
         cloud2 = privacy_config.get("cloud") or {}
-        if consent2.get("share_cloud") and cloud2.get("push_enabled"):
-            console.print("[cyan][4/4] Push : rollups vers bucket equipe...[/cyan]")
+        if consent2.get("cloud_sync") and cloud2.get("push_enabled"):
+            console.print("[cyan][4/4] Push : rollups vers cloud bucket...[/cyan]")
             try:
                 ctx.invoke(push, since=None, dry_run=False)
                 console.print("[green]✓[/green] [4/4] Push OK")
@@ -584,10 +779,10 @@ def setup(ctx: click.Context, skip_push: bool):
         else:
             console.print(
                 "[yellow]⊘[/yellow] [4/4] Push skip "
-                "(partage equipe desactive dans privacy.yaml)"
+                "(cloud sync desactive dans privacy.yaml)"
             )
     else:
-        console.print("[cyan][4/4] Push : rollups vers bucket equipe...[/cyan]")
+        console.print("[cyan][4/4] Push : rollups vers cloud bucket...[/cyan]")
         try:
             ctx.invoke(push, since=None, dry_run=False)
             console.print("[green]✓[/green] [4/4] Push OK")
@@ -602,7 +797,7 @@ def setup(ctx: click.Context, skip_push: bool):
     console.print("[bold green]═══ setup termine ═══[/bold green]")
     console.print(
         "Prochaine etape recommandee : "
-        "[cyan]ship1000x install-scheduler[/cyan] pour automatiser le daily push."
+        "[cyan]tracker install-scheduler[/cyan] pour automatiser le daily push."
     )
 
 
@@ -618,14 +813,14 @@ def privacy():
     console.print()
     if consent.get("signed_at"):
         console.print(f"  [green]✓[/green] Consent signe : {consent.get('user_email', '?')} le {consent['signed_at'][:10]}")
-        console.print(f"    Partage equipe : {'[green]oui[/green]' if consent.get('share_cloud') else '[yellow]non[/yellow]'}")
+        console.print(f"    Cloud sync : {'[green]oui[/green]' if consent.get('cloud_sync') else '[yellow]non[/yellow]'}")
     else:
-        console.print("  [yellow]⚠[/yellow]  Consent non signe. Lance [cyan]ship1000x init[/cyan].")
+        console.print(f"  [yellow]⚠[/yellow]  Consent non signe. Lance [cyan]tracker init[/cyan].")
     console.print()
 
     console.print("[bold]Partage par projet[/bold]")
     if not share:
-        console.print("  [yellow]Tous les projets sont en mode private par defaut[/yellow]")
+        console.print(f"  [yellow]Tous les projets sont en mode private par defaut[/yellow]")
     else:
         for project_id, level in share.items():
             if project_id == "_default":
@@ -641,7 +836,7 @@ def privacy():
         console.print(f"  [green]✓[/green] {cloud.get('provider', '?')} : {cloud.get('bucket', '?')}")
         console.print(f"    Push quotidien {cloud.get('push_time', '?')} UTC")
     else:
-        console.print("  [yellow]Push desactive[/yellow]")
+        console.print(f"  [yellow]Push desactive[/yellow]")
 
     console.print()
     console.print(f"Pour editer : [cyan]{PRIVACY_CONFIG}[/cyan]")
@@ -668,10 +863,30 @@ def export(since: str, output: str | None):
 def rollup(since: str):
     """(Re)calcule les daily_rollup agreges depuis les events."""
     from ship1000x.core.rollup import rebuild_rollups
+    from ship1000x.core.cadence import refresh_user_cadence
     storage = _get_storage()
     cutoff = _parse_since(since) or (datetime.now() - timedelta(days=180))
     stats = rebuild_rollups(storage, cutoff)
     console.print(f"[green]✓[/green] Rollups : {stats['rollups_created']} lignes sur {stats['days']} jours")
+
+    # Refresh du profil de cadence (distribution des deltas perso) — sert au
+    # cap auto par-user cote dashboard. Decision Charles 2026-04-25.
+    privacy_config = _load_yaml(PRIVACY_CONFIG)
+    consent = (privacy_config.get("consent") or {})
+    user_email = consent.get("user_email", "unknown@local")
+    profile = refresh_user_cadence(storage, user_email, window_days=14)
+    if profile:
+        console.print(
+            f"[green]✓[/green] Cadence : p50={profile['p50']//60}min "
+            f"p75={profile['p75']//60}min p90={profile['p90']//60}min "
+            f"p95={profile['p95']//60}min p99={profile['p99']//60}min "
+            f"(n={profile['sample_size']})"
+        )
+    else:
+        console.print(
+            "[yellow]⚠[/yellow]  Cadence non calculee : pas assez de data "
+            "(< 50 transitions inter-prompts dans la fenetre)"
+        )
 
 
 @cli.command("backfill-machine-id")
@@ -688,7 +903,7 @@ def backfill_machine_id_cmd(ctx: click.Context):
     locaux ont ete collectes par la machine courante. Idempotent.
 
     A lancer 1 fois apres upgrade V2, sur CHAQUE machine. Puis relancer
-    `ship1000x rollup` + `ship1000x push` pour propager vers le dashboard.
+    `tracker rollup` + `tracker push` pour propager vers le dashboard.
     """
     from ship1000x.core.storage import _current_machine_id
 
@@ -719,8 +934,8 @@ def backfill_machine_id_cmd(ctx: click.Context):
 
     console.print()
     console.print("[bold]Prochaines etapes :[/bold]")
-    console.print("  1. [cyan]ship1000x rollup[/cyan]              — recalcule les daily_rollup avec machine_id")
-    console.print("  2. [cyan]ship1000x push[/cyan]                — re-upload les rollups vers S3 (ecrase les fichiers pre-V2)")
+    console.print(f"  1. [cyan]tracker rollup[/cyan]              — recalcule les daily_rollup avec machine_id")
+    console.print(f"  2. [cyan]tracker push[/cyan]                — re-upload les rollups vers S3 (ecrase les fichiers pre-V2)")
     console.print(f"  3. Dashboard → Sync → tu verras '{current_machine}' avec les vraies heures")
 
 
@@ -740,7 +955,7 @@ def reclassify(ctx: click.Context, since: str):
       - edition de config/line_classification.local.yaml
       - changement de regles seed_threshold
     """
-    console.print("[bold cyan]═══ ship1000x reclassify ═══[/bold cyan]")
+    console.print("[bold cyan]═══ tracker reclassify ═══[/bold cyan]")
     console.print()
 
     storage = _get_storage()
@@ -771,7 +986,7 @@ def reclassify(ctx: click.Context, since: str):
         deleted_events = cur.rowcount
     console.print(f"  [dim]→ {deleted_events} events purges pour la fenetre[/dim]")
 
-    # Re-run toutes les sources (idem que `ship1000x ingest`). Les collectors
+    # Re-run toutes les sources (idem que `tracker ingest`). Les collectors
     # vont relire les fichiers source (Claude Code JSONL, Codex sessions,
     # git log) et les inserer avec le classifier V2.
     sources_enabled = privacy_config.get("sources", {})
@@ -782,6 +997,9 @@ def reclassify(ctx: click.Context, since: str):
     total_ingested = 0
     for collector_name, enabled_key in [
         ("claude_code", "claude_code"),
+        ("openclaw", "openclaw"),
+        ("anthropic_usage", "anthropic_usage"),
+        ("openai_usage", "openai_usage"),
         ("codex", "codex"),
         ("cursor", "cursor"),
         ("git_multi", "git"),
@@ -852,17 +1070,17 @@ def reclassify(ctx: click.Context, since: str):
 @click.option("--since", default=None, help="Date YYYY-MM-DD (defaut : debut du mois)")
 @click.option("--dry-run", is_flag=True, help="Affiche le plan sans uploader")
 def push(since: str | None, dry_run: bool):
-    """Push les rollups agreges vers un bucket S3 (opt-in)."""
+    """Push les rollups agreges vers Garage S3 (opt-in)."""
     from ship1000x.core.rollup import get_rollups_for_push
     from ship1000x.exporters.s3_push import push_to_s3
 
     privacy_config = _load_yaml(PRIVACY_CONFIG)
     consent = privacy_config.get("consent") or {}
     if not consent.get("signed_at"):
-        console.print("[red]✗[/red] Consent non signe. Lance [cyan]ship1000x init[/cyan] d'abord.")
+        console.print("[red]✗[/red] Consent non signe. Lance [cyan]tracker init[/cyan] d'abord.")
         return
-    if not consent.get("share_cloud") and not dry_run:
-        console.print("[yellow]Partage equipe desactive. Rien a pousser.[/yellow]")
+    if not consent.get("cloud_sync") and not dry_run:
+        console.print("[yellow]Cloud sync desactive. Rien a pousser.[/yellow]")
         return
 
     cloud = privacy_config.get("cloud") or {}
@@ -877,7 +1095,7 @@ def push(since: str | None, dry_run: bool):
     if not rollups:
         console.print("[yellow]Aucun rollup eligible au partage.[/yellow]")
         console.print(
-            "  Lance [cyan]ship1000x doctor --fix[/cyan] pour auto-corriger "
+            "  Lance [cyan]tracker doctor --fix[/cyan] pour auto-corriger "
             "la config `share` dans privacy.yaml."
         )
         return
@@ -902,10 +1120,10 @@ def push(since: str | None, dry_run: bool):
         # Message humain + pointeur vers doctor --fix plutot que traceback brut.
         err_name = type(e).__name__
         if "Credentials" in err_name or "NoCredentials" in err_name:
-            console.print("[red]✗[/red] Credentials S3 absents.")
+            console.print("[red]✗[/red] Credentials AWS/Garage S3 absents.")
             console.print("  Deux options :")
             console.print(
-                "  1. [cyan]ship1000x doctor --fix[/cyan]  — prompt interactif, "
+                "  1. [cyan]tracker doctor --fix[/cyan]  — prompt interactif, "
                 "ecrit dans ~/.aws/credentials (recommande)"
             )
             console.print(
@@ -913,8 +1131,8 @@ def push(since: str | None, dry_run: bool):
                 "export AWS_SECRET_ACCESS_KEY=...[/cyan] dans ~/.zshrc"
             )
             console.print(
-                "  3. Verifie ton provider S3 (bucket, region, endpoint) "
-                "dans config/privacy.yaml cloud.* ."
+                "  3. Or contact your bucket admin if you use a shared "
+                "Garage S3 instance."
             )
             return
         console.print(f"[red]✗ Echec push ({err_name}) : {e}[/red]")
@@ -928,11 +1146,31 @@ def push(since: str | None, dry_run: bool):
             f"{obj['size_bytes']/1024:.1f} KB"
         )
 
+    # Push aussi le profil de cadence (cap auto par-user, V6 2026-04-25)
+    from ship1000x.core.cadence import get_cadence_profile
+    from ship1000x.exporters.s3_push import push_cadence_to_s3
+    cadence_profile = get_cadence_profile(storage, user_email)
+    if cadence_profile:
+        try:
+            cad_result = push_cadence_to_s3(
+                profile=cadence_profile,
+                cloud_config=cloud,
+                user_email=user_email,
+                dry_run=dry_run,
+            )
+            if cad_result.get("uploaded") or cad_result.get("dry_run"):
+                console.print(
+                    f"[green]✓[/green] {prefix}Cadence : {cad_result['key']} · "
+                    f"{cad_result.get('size_bytes', 0)} bytes"
+                )
+        except (ValueError, RuntimeError) as e:
+            console.print(f"[yellow]⚠[/yellow]  Cadence push echec : {e}")
+
 
 @cli.command()
 def health():
     """Scan toutes les sources IA potentielles sur la machine + statut tracker."""
-    from ship1000x.core.health import health_payload, scan_sources
+    from ship1000x.core.health import scan_sources, health_payload
     privacy_config = _load_yaml(PRIVACY_CONFIG)
     sources = scan_sources(privacy_config)
 
@@ -994,18 +1232,17 @@ def health():
 @cli.command("push-health")
 @click.option("--dry-run", is_flag=True, help="Affiche le JSON sans uploader")
 def push_health_cmd(dry_run: bool):
-    """Push le scan sante des sources vers un bucket S3 (s3://<bucket>/health/<user>.json)."""
+    """Push le scan sante des sources vers Garage S3 (s3://<bucket>/health/<user>.json)."""
     import json
-
-    from ship1000x.core.health import health_payload, scan_sources
+    from ship1000x.core.health import scan_sources, health_payload
 
     privacy_config = _load_yaml(PRIVACY_CONFIG)
     consent = privacy_config.get("consent") or {}
     if not consent.get("signed_at"):
         console.print("[red]✗[/red] Consent non signe.")
         return
-    if not consent.get("share_cloud") and not dry_run:
-        console.print("[yellow]Partage equipe desactive.[/yellow]")
+    if not consent.get("cloud_sync") and not dry_run:
+        console.print("[yellow]Cloud sync desactive.[/yellow]")
         return
 
     cloud = privacy_config.get("cloud") or {}
@@ -1025,7 +1262,6 @@ def push_health_cmd(dry_run: bool):
 
     try:
         import os
-
         import boto3
         from botocore.config import Config
     except ImportError:
@@ -1039,7 +1275,6 @@ def push_health_cmd(dry_run: bool):
     endpoint = cloud.get("endpoint")
     region = cloud.get("region", "garage")
     import platform
-
     from ship1000x.exporters.s3_push import _slugify
     machine_id = platform.node()
     user_slug = user_email.replace("@", "-at-").replace(".", "-")
@@ -1076,9 +1311,9 @@ def daily(ctx: click.Context):
     # Avant le push, signaler les projets nouveaux apparus en DB sans entree
     # explicite dans `share` map. Ils heritent de `_default` (private par
     # defaut → safe), mais on previent l'utilisateur pour qu'il les classifie
-    # consciemment via `ship1000x projects --select`. En mode cron (non-TTY)
+    # consciemment via `tracker projects --select`. En mode cron (non-TTY)
     # on log juste le warning, pas de prompt bloquant.
-    if consent.get("share_cloud"):
+    if consent.get("cloud_sync"):
         from ship1000x.core.consent_wizard import (
             collect_db_projects,
             find_unclassified_projects,
@@ -1100,11 +1335,11 @@ def daily(ctx: click.Context):
             if len(unclassified) > 5:
                 console.print(f"    ... et {len(unclassified) - 5} autres")
             console.print(
-                "    [dim]Lance [cyan]ship1000x projects --select[/cyan] "
+                "    [dim]Lance [cyan]tracker projects --select[/cyan] "
                 "pour les classifier explicitement.[/dim]"
             )
 
-    if consent.get("share_cloud") and cloud.get("push_enabled"):
+    if consent.get("cloud_sync") and cloud.get("push_enabled"):
         console.print("[cyan][daily][/cyan] Push rollups...")
         ctx.invoke(push, since=None, dry_run=False)
         console.print("[cyan][daily][/cyan] Push insights...")
@@ -1118,7 +1353,7 @@ def daily(ctx: click.Context):
 @cli.command("install-scheduler")
 @click.option("--time", "time_str", default="03:00", help="Heure HH:MM (defaut 03:00)")
 def install_scheduler_cmd(time_str: str):
-    """Installe le cron launchd pour ship1000x daily (3h du matin par defaut)."""
+    """Installe le cron launchd pour tracker daily (3h du matin par defaut)."""
     from ship1000x.core.scheduler import install as scheduler_install
     try:
         hour, minute = map(int, time_str.split(":"))
@@ -1152,7 +1387,7 @@ def scheduler_status_cmd():
     s = sched_status()
     if not s["installed"]:
         console.print("[yellow]Scheduler non installe[/yellow]")
-        console.print("  Installe avec : [cyan]ship1000x install-scheduler[/cyan]")
+        console.print("  Installe avec : [cyan]tracker install-scheduler[/cyan]")
         return
     console.print(f"[green]✓[/green] Plist : {s['plist_path']}")
     console.print(f"  Loaded : {'[green]oui[/green]' if s['loaded'] else '[yellow]non[/yellow]'}")
@@ -1167,7 +1402,7 @@ def delete(confirm: bool, keep_cloud: bool):
         console.print("[yellow]Cette commande supprime :[/yellow]")
         console.print("  - La DB locale (db/tracker.sqlite)")
         console.print("  - Les logs cron")
-        console.print("  - Tous tes rollups dans le bucket equipe (sauf si --keep-cloud)")
+        console.print("  - Tous tes rollups dans le cloud bucket (sauf si --keep-cloud)")
         console.print("")
         console.print("Relance avec [cyan]--confirm[/cyan] pour executer.")
         return
@@ -1191,7 +1426,6 @@ def delete(confirm: bool, keep_cloud: bool):
         if user_email and bucket and endpoint:
             try:
                 import os
-
                 import boto3
                 from botocore.config import Config
                 os.environ.setdefault("AWS_REQUEST_CHECKSUM_CALCULATION", "when_required")
@@ -1233,7 +1467,7 @@ def status():
     )
     last_ts = last[0]["last"] if last else None
 
-    console.print("[bold]Ship1000x[/bold]")
+    console.print(f"[bold]Ship1000x[/bold]")
     console.print(f"  DB path         : {DB_PATH}")
     console.print(f"  DB size         : {db_size_mb:.2f} MB")
     console.print(f"  Events          : {total_events:,}")
@@ -1280,7 +1514,7 @@ def _parse_since_days(since: str) -> int:
 @click.option("--project", default=None, help="Filtre par project_id (optionnel)")
 def insights(since: str, project: str | None):
     """Vue synthetique : overview + ratios + multiplicateur + signaux."""
-    from ship1000x.insights.engine import compute_overview, make_window
+    from ship1000x.insights.engine import make_window, compute_overview
     from ship1000x.insights.multiplier import compute_multiplier
     from ship1000x.insights.signals import compute_all_signals
 
@@ -1346,13 +1580,58 @@ def insights(since: str, project: str | None):
         console.print("[bold]Signaux[/bold]  [green]✓ Rien a signaler[/green]")
     console.print()
 
+    # Trust Score per source + global composite
+    from ship1000x.insights.trust_score import (
+        compute_global_score,
+        get_all_source_scores,
+        get_score_label,
+    )
+
+    user_email = _get_user_email()
+    source_scores = get_all_source_scores(storage, window_days=days)
+    global_score = compute_global_score(storage, window_days=days, user_email=user_email)
+
+    if source_scores:
+        console.print("[bold]Trust Score[/bold]  [dim](confidence per metric, see docs/TRUST_SCORE.md)[/dim]")
+        ts_table = Table(show_header=True, box=None, padding=(0, 2))
+        ts_table.add_column("Source", style="cyan")
+        ts_table.add_column("Events", justify="right")
+        ts_table.add_column("Score", justify="right")
+        ts_table.add_column("Level")
+        for src, info in sorted(source_scores.items(), key=lambda x: -x[1]["score"]):
+            label, color = get_score_label(info["score"])
+            ts_table.add_row(
+                src,
+                f"{info['event_count']:,}".replace(",", " "),
+                f"{info['score']}/100",
+                f"[{color}]{label}[/{color}]",
+            )
+        ts_table.add_section()
+        glabel, gcolor = get_score_label(global_score["score"])
+        ts_table.add_row(
+            "[bold]GLOBAL[/bold]",
+            "",
+            f"[bold]{global_score['score']}/100[/bold]",
+            f"[bold {gcolor}]{glabel}[/bold {gcolor}]",
+        )
+        console.print(ts_table)
+
+        # Bonus / penalty breakdown si pertinent
+        details: list[str] = []
+        details.extend(global_score["bonus_reasons"])
+        details.extend(global_score["penalty_reasons"])
+        if details:
+            console.print(f"  [dim]composite: base {global_score['base']} "
+                          f"{' '.join(details)}[/dim]")
+        console.print()
+
 
 @cli.command()
 @click.option("--since", default="30d", help="Fenetre ex: 7d, 30d")
 @click.option("--project", default=None)
 def ratios(since: str, project: str | None):
     """Focus ratios efficience detailles."""
-    from ship1000x.insights.engine import compute_overview, make_window
+    from ship1000x.insights.engine import make_window, compute_overview
     days = _parse_since_days(since)
     window = make_window(since_days=days, project=project)
     storage = _get_storage()
@@ -1402,7 +1681,7 @@ def multiplier(since: str, project: str | None, tjm: float | None, value: float 
     console.print()
     console.print(f"[bold cyan]═══ Multiplicateur IA-native {project or 'global'} | {since} ═══[/bold cyan]")
     console.print()
-    console.print("[bold]Production[/bold]")
+    console.print(f"[bold]Production[/bold]")
     console.print(f"  Output reel      : {out['lines_per_hour']} lignes/h")
     console.print(f"  Benchmark senior : {out['benchmark_senior_low']}-{out['benchmark_senior_high']} lignes/h (sans IA)")
     console.print(f"  Facteur          : [cyan]x{out['factor_vs_senior_low']} → x{out['factor_vs_senior_high']}[/cyan] "
@@ -1416,7 +1695,7 @@ def multiplier(since: str, project: str | None, tjm: float | None, value: float 
         console.print(f"  Ratio v/t        : [cyan]x{v['value_time_ratio']}[/cyan] "
                       f"(valeur produit / cout-temps senior)")
     console.print()
-    console.print("[bold]Cout IA (LLM)[/bold]")
+    console.print(f"[bold]Cout IA (LLM)[/bold]")
     console.print(f"  Total            : ${c['total_usd']}")
     console.print(f"  Par heure        : ${c['per_hour_usd'] or 0:.2f}/h")
     console.print(f"  Par commit       : ${c['per_commit_usd'] or 0:.2f}")
@@ -1506,7 +1785,7 @@ def profile(since: str, project: str | None):
     if (s["mono"] + s["multi"]) > 0:
         mono_pct = s["mono"] / (s["mono"] + s["multi"]) * 100
         console.print(f"[bold]Journees mono-tache[/bold] : {s['mono']}/{s['mono']+s['multi']} ({mono_pct:.0f}%)")
-        console.print("  (un projet > 70% du temps du jour)")
+        console.print(f"  (un projet > 70% du temps du jour)")
         console.print()
 
     # Wordcount
@@ -1525,17 +1804,17 @@ def profile(since: str, project: str | None):
 @click.option("--value", default=None, type=float)
 @click.option("--dry-run", is_flag=True)
 def push_insights_cmd(since: str, tjm: float | None, value: float | None, dry_run: bool):
-    """Calcule les insights et push le JSON vers le bucket S3 configure."""
-    from ship1000x.exporters.insights_push import build_insights_payload, push_insights_to_s3
+    """Compute insights and push JSON to Garage S3 (advanced — for optional cloud sync)."""
     from ship1000x.insights.engine import make_window
+    from ship1000x.exporters.insights_push import build_insights_payload, push_insights_to_s3
 
     privacy_config = _load_yaml(PRIVACY_CONFIG)
     consent = privacy_config.get("consent") or {}
     if not consent.get("signed_at"):
-        console.print("[red]✗[/red] Consent non signe. Lance [cyan]ship1000x init[/cyan] d'abord.")
+        console.print("[red]✗[/red] Consent non signe. Lance [cyan]tracker init[/cyan] d'abord.")
         return
-    if not consent.get("share_cloud") and not dry_run:
-        console.print("[yellow]Partage equipe desactive. Rien a pousser.[/yellow]")
+    if not consent.get("cloud_sync") and not dry_run:
+        console.print("[yellow]Cloud sync desactive. Rien a pousser.[/yellow]")
         return
     cloud = privacy_config.get("cloud") or {}
     if not cloud.get("push_enabled") and not dry_run:
@@ -1794,7 +2073,7 @@ def audit(since: str):
     if gaps:
         console.print(f"[yellow]⚠ {len(gaps)} gaps detectes[/yellow] "
                       f"({gap_commits} commits sans session IA associee)")
-        console.print("  -> possibles sources non-tracees (autre Mac, outil IA non connecte, classifier rate)")
+        console.print(f"  -> possibles sources non-tracees (autre Mac, outil IA non connecte, classifier rate)")
         console.print()
         table = Table(title="Gaps : jours/projets avec commits mais 0h active", show_lines=False)
         table.add_column("Date")
@@ -1890,11 +2169,10 @@ def discover(save: bool):
     ~/.cursor/ai-tracking. Cette commande detecte les copies/reloges.
 
     Avec --save, ajoute les paths trouves a privacy.yaml → pris en compte
-    au prochain `ship1000x ingest`.
+    au prochain `tracker ingest`.
     """
-    import yaml as _yaml
-
     from ship1000x.core.discovery import discover_paths
+    import yaml as _yaml
 
     console.print("[bold cyan]═══ Discovery ═══[/bold cyan]")
     console.print(f"Scan de [cyan]{Path.home()}[/cyan] (max depth 4)...")
@@ -1927,7 +2205,7 @@ def discover(save: bool):
         )
         console.print(f"[green]✓[/green] Paths sauvegardes dans [cyan]{PRIVACY_CONFIG}[/cyan]")
         console.print(
-            "  Lance [cyan]ship1000x ingest[/cyan] pour que les collectors les utilisent."
+            "  Lance [cyan]tracker ingest[/cyan] pour que les collectors les utilisent."
         )
     else:
         console.print(
@@ -1947,14 +2225,9 @@ def doctor(fix: bool):
     Avec --fix : applique les corrections automatiques (migration yaml silencieuse,
     prompt interactif pour credentials S3 manquants, ecriture dans ~/.aws/credentials).
     """
-    import os
-
-    from ship1000x.core.config_migration import (
-        check_aws_credentials,
-        run_auto_migration,
-        write_aws_credentials,
-    )
     from ship1000x.core.health import scan_sources
+    from ship1000x.core.config_migration import run_auto_migration, check_aws_credentials, write_aws_credentials
+    import os
 
     # Étape 0 — Migration auto silencieuse si --fix
     if fix and PRIVACY_CONFIG.exists():
@@ -1978,12 +2251,11 @@ def doctor(fix: bool):
     if fix and cloud.get("push_enabled"):
         creds_info = check_aws_credentials()
         if not creds_info["found"]:
-            from rich.prompt import Confirm, Prompt
-
+            from rich.prompt import Prompt, Confirm
             from ship1000x.core.config_migration import (
-                format_secret_preview,
                 validate_aws_access_key,
                 validate_aws_secret,
+                format_secret_preview,
             )
 
             def _print_fallback():
@@ -1999,7 +2271,7 @@ def doctor(fix: bool):
                 console.print("[cyan]EOF[/cyan]")
                 console.print("[cyan]chmod 600 ~/.aws/credentials[/cyan]")
 
-            console.print("[yellow]⚠[/yellow]  Credentials S3 absents.")
+            console.print("[yellow]⚠[/yellow]  Credentials AWS/Garage S3 absents.")
             console.print(
                 "[dim]  Note : la saisie est [bold]visible a l'ecran[/bold] (pas masquee). "
                 "C'est intentionnel — le masquage casse le paste depuis certains terminaux macOS. "
@@ -2070,7 +2342,7 @@ def doctor(fix: bool):
                                 f"secret {format_secret_preview(read_sk)}"
                             )
                             console.print(
-                                "  Les prochains [cyan]ship1000x push[/cyan] utiliseront ces credentials."
+                                "  Les prochains [cyan]tracker push[/cyan] utiliseront ces credentials."
                             )
                         else:
                             console.print(
@@ -2084,10 +2356,10 @@ def doctor(fix: bool):
     if consent.get("signed_at"):
         console.print(f"  [green]v[/green] Consent signe pour {consent.get('user_email')} le {consent['signed_at'][:10]}")
         console.print(f"  [green]v[/green] display_name = {consent.get('display_name', '-')}")
-        share = consent.get('share_cloud')
-        console.print(f"  {'[green]v[/green]' if share else '[yellow]o[/yellow]'} share_cloud = {share}")
+        share = consent.get('cloud_sync')
+        console.print(f"  {'[green]v[/green]' if share else '[yellow]o[/yellow]'} cloud_sync = {share}")
     else:
-        console.print("  [red]x[/red] Consent non signe. Lance [cyan]ship1000x init[/cyan]")
+        console.print("  [red]x[/red] Consent non signe. Lance [cyan]tracker init[/cyan]")
         return
     console.print()
 
@@ -2129,8 +2401,7 @@ def doctor(fix: bool):
 
     # 4. Coverage 7j
     storage = _get_storage()
-    from datetime import datetime as _dt
-    from datetime import timedelta as _td
+    from datetime import datetime as _dt, timedelta as _td
     cutoff_7 = (_dt.utcnow() - _td(days=7)).isoformat()
     with storage.conn() as c:
         r = c.execute("""
@@ -2162,7 +2433,7 @@ def doctor(fix: bool):
         if isinstance(status, dict) and status.get("installed"):
             console.print(f"  [green]v[/green] Cron installe a {status.get('time', '-')}")
         else:
-            console.print("  [yellow]o[/yellow] Pas de cron installe. Lance [cyan]ship1000x install-scheduler[/cyan]")
+            console.print("  [yellow]o[/yellow] Pas de cron installe. Lance [cyan]tracker install-scheduler[/cyan]")
     except Exception:
         console.print("  [dim](scheduler.status() non dispo)[/dim]")
     console.print()
@@ -2200,8 +2471,8 @@ def doctor(fix: bool):
     console.print()
 
 
-def main():
-    """Entrypoint for the `ship1000x` console script (declared in pyproject.toml)."""
+def main() -> None:
+    """Entry point wrapper for pyproject.toml [project.scripts]."""
     cli()
 
 

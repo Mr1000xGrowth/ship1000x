@@ -5,28 +5,79 @@ All notable changes to Ship1000x are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [Unreleased] — V1 hardening (2026-05-15)
 
-### Added
+### Added — Cost & accuracy fixes
+- **Claude Code SSE chunks dedup** : events `assistant` are now deduplicated
+  by `message.id`, fixing a ~×2.49 overcount of output tokens and turns.
+- **Claude Code cache tokens captured** : `cache_read_input_tokens` and
+  `cache_creation_input_tokens` are now read and added to the cost
+  computation. On a tested 4MB JSONL session, this captured 99M tokens
+  previously ignored (vs 27K captured pre-fix = 0.03%).
+- **Productivity ratios use `lines_real_added`** (V2 breakdown) :
+  `lines_per_hour`, `lines_per_typed`, `cost_per_line_net` now exclude
+  vendored / generated / seed code. Defensible vs audit. Raw versions kept
+  as `_raw` aliases for retro-compat dashboards.
+
+### Added — Multi-agent fix : unified active time cross-source
+- **New `core/cadence.py`** : computes the user's personal P95 threshold
+  for active time from inter-prompt intervals over a 14-day window. Stored
+  in `user_cadence_profile` table.
+- **New `core/unified_metrics.py`** : merges human events from all sources
+  into a single sorted timeline, applies 4 thresholds (strict 5min / auto
+  P95 / loose 15min / unified = P95), and exposes 5 metrics per day.
+  Persisted in new `daily_unified` table. Resolves the multi-agent overcount
+  bug (×2.85 measured on a 60-day real DB : 394h raw → 138h unified).
+- **New `tracker calibrate` command** : displays the user's cadence profile
+  (P50/P75/P90/P95/P99) and persists it.
+- **New `tracker today --compare-modes` command** : displays the 5 modes
+  side-by-side with arithmetic verification.
+
+### Added — Trust Score
+- **New `insights/trust_score.py`** : per-source confidence score (weighted
+  average of event-level `confidence_flag` : high=100 / medium=70 / low=40)
+  and global composite score with bonuses (cadence calibrated +3, unified
+  populated +5) and penalties (critical sources missing -10).
+- **`tracker insights` displays Trust Score** : per-source breakdown table +
+  GLOBAL composite + bonus/penalty rationale.
+
+### Fixed — Privacy hardening
+- **Privacy filter no longer bypassed** : `sanitize_event` now deserializes
+  `raw_meta` JSON before whitelist filtering (was silently bypassed for
+  collectors passing JSON strings).
+- **Whitelist aligned to 46 real keys** used by collectors (vs 14 outdated
+  before). No metadata loss.
+- **Recursive path anonymization** for `paths_sampled`, `files_touched`,
+  `log_file`, `primary_project` (lists and nested dicts).
+- **Central guardrail** : `sanitize_event` now called automatically in
+  `storage.upsert_event`, even if the collector forgot it (idempotent).
+- **`insights_push` share_config filter** : conservative defaults — email
+  hashed (SHA256:16), financials stripped, project_ids hashed by default.
+
+### Added — New collectors
+- **`collectors/openclaw.py`** : OpenClaw integration (lobster way 🦞).
+- **`collectors/anthropic_usage.py`** : Anthropic Admin API for official
+  invoice cross-validation (Factual 100%).
+- **`collectors/openai_usage.py`** : OpenAI usage API (Factual 100%).
+
+### Added — Documentation
+- **6 new public docs in English** : COVERAGE, METHODOLOGY, PRIVACY,
+  TRUST_SCORE, COLLECTORS, QUICKSTART.
+
+### Added — Pre-V1 hardening (already in [Unreleased] before this session)
 - **Per-project consent wizard** : `ship1000x init` and the new
   `ship1000x projects --select` flag prompt for the share level
-  (`aggregated` / `private` / `disabled`) of each detected project, instead
-  of defaulting every git repo to `aggregated` silently.
-- **Unclassified projects warning** : `ship1000x daily` now lists projects
-  present in the local DB but absent from the `share` map in `privacy.yaml`,
-  pointing the user at `ship1000x projects --select`. New projects still
-  fall back to `_default` (private by default) so nothing leaks
-  unintentionally.
-- **`core/consent_wizard` module** : reusable helpers
-  (`prompt_share_levels`, `find_unclassified_projects`,
-  `collect_db_projects`, `collect_detected_repos`) covered by 14 new
-  unit tests.
+  (`aggregated` / `private` / `disabled`) of each detected project.
+- **Unclassified projects warning** : `ship1000x daily` lists projects
+  present in DB but absent from `share` map.
+- **`core/consent_wizard` module** : reusable helpers covered by 14 unit
+  tests.
 
-### Planned for v0.2.0
-- Local Flask web dashboard (`ship1000x dashboard` → `localhost:8765`)
-- First PyPI release
-- GitHub API enrichment (CI status, PR reviews)
-- Aider + Zed collectors
+### Planned for v0.2.0 (this release)
+- This release ships all the V1 hardening above
+- First PyPI release after tagging
+- Continue.dev / Aider / Antigravity collectors deferred to v0.3.0
+  (community contributions welcome — see CONTRIBUTING.md)
 
 ## [0.1.0] — 2026-04-21
 
