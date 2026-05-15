@@ -1721,6 +1721,159 @@ def _parse_since_days(since: str) -> int:
     return 30
 
 
+def _discover_github(owner: str) -> None:
+    """List GitHub repos via gh CLI + suggest aliases for unmapped local activity."""
+    import json
+    import subprocess
+
+    console.print(f"[bold cyan]═══ GitHub discovery : {owner} ═══[/bold cyan]")
+    console.print()
+
+    # 1. List repos via gh CLI
+    try:
+        result = subprocess.run(
+            ["gh", "repo", "list", owner, "--limit", "200", "--json", "name,nameWithOwner"],
+            capture_output=True, text=True, timeout=15, check=True,
+        )
+        repos = json.loads(result.stdout)
+    except (subprocess.CalledProcessError, FileNotFoundError) as e:
+        console.print(f"[red]Erreur gh CLI :[/red] {e}")
+        console.print("[dim]Installer GitHub CLI : https://cli.github.com[/dim]")
+        return
+    except (subprocess.TimeoutExpired, json.JSONDecodeError) as e:
+        console.print(f"[red]Erreur lors de la liste des repos :[/red] {e}")
+        return
+
+    console.print(f"[green]✓[/green] {len(repos)} repos trouves dans {owner}")
+    console.print()
+
+    # 2. Get all project_ids from DB
+    storage = _get_storage()
+    with storage.conn() as c:
+        rows = c.execute(
+            "SELECT DISTINCT project_id, COUNT(*) AS n FROM events GROUP BY project_id ORDER BY n DESC"
+        ).fetchall()
+    db_pids = {r["project_id"]: r["n"] for r in rows if r["project_id"]}
+
+    # 3. Match : for each GitHub repo, expected canonical id is "github.com/<owner>/<name>" lowercased
+    expected_ids = {f"github.com/{r['nameWithOwner'].lower()}": r["name"] for r in repos}
+
+    # 4. Find unmapped : project_ids in DB that look like local folder names
+    #    matching a GitHub repo name (= candidate alias targets)
+    suggestions: list[tuple[str, str, int]] = []  # (current_pid, suggested_canonical, n_events)
+    for pid, n in db_pids.items():
+        # Skip already-canonical github.com/ ids
+        if pid.startswith("github.com/"):
+            continue
+        # Skip system buckets
+        if pid in ("unclassified", None) or pid.startswith("dir:") or pid.startswith("local:"):
+            continue
+        # Try to match the pid (or its tail) to a GitHub repo name
+        pid_lower = pid.lower()
+        for canonical, repo_name in expected_ids.items():
+            if pid_lower == repo_name.lower() or pid_lower.endswith(f"/{repo_name.lower()}"):
+                suggestions.append((pid, canonical, n))
+                break
+
+    if not suggestions:
+        console.print("[green]✓ Aucune suggestion d'alias[/green] : tes project_ids matchent deja les repos GitHub")
+        return
+
+    console.print(f"[yellow]→ {len(suggestions)} alias suggere(s) :[/yellow]")
+    console.print()
+    table = Table(show_header=True)
+    table.add_column("Current project_id", style="yellow")
+    table.add_column("→ Canonical (GitHub)", style="cyan")
+    table.add_column("Events", justify="right")
+    for current, canonical, n in sorted(suggestions, key=lambda x: -x[2]):
+        table.add_row(current, canonical, str(n))
+    console.print(table)
+    console.print()
+
+    # 5. Print yaml snippet ready to copy
+    console.print("[bold]Add to your config/projects.yaml under `aliases:` :[/bold]")
+    console.print()
+    console.print("[cyan]aliases:[/cyan]")
+    for current, canonical, _ in sorted(suggestions, key=lambda x: -x[2]):
+        console.print(f"  [cyan]\"{current}\": \"{canonical}\"[/cyan]")
+    console.print()
+    console.print("[dim]Then run :[/dim]")
+    console.print("  [cyan]ship1000x reclassify --since 365d[/cyan]   # propagate to historical events")
+
+
+@cli.command()
+def pulse():
+    """One-line daily check : your habit-forming morning command.
+
+    Shows today + week trend in a single line. Designed to become the
+    user's morning ritual : alias it as `pulse` in your shell and check
+    it like checking the weather.
+    """
+    storage = _get_storage()
+    today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    today_iso = today_start.date().isoformat()
+    week_ago = (today_start - timedelta(days=7)).date().isoformat()
+
+    with storage.conn() as c:
+        # Today : active sec + cost
+        today_row = c.execute(
+            """SELECT
+                 COALESCE(SUM(duration_sec), 0) AS sec,
+                 COALESCE(SUM(cost_estimated), 0) AS cost
+               FROM events
+               WHERE date(started_at) = ? AND source != 'git'""",
+            (today_iso,),
+        ).fetchone()
+        today_h = (today_row["sec"] or 0) / 3600
+        today_cost = today_row["cost"] or 0
+        # Today : commits
+        today_commits = c.execute(
+            "SELECT COUNT(*) AS n FROM events WHERE date(started_at) = ? AND source = 'git'",
+            (today_iso,),
+        ).fetchone()["n"] or 0
+        # Today : peak parallel sources (heuristic : count distinct active sources)
+        today_sources = c.execute(
+            """SELECT COUNT(DISTINCT source) AS n FROM events
+               WHERE date(started_at) = ? AND source != 'git' AND duration_sec > 0""",
+            (today_iso,),
+        ).fetchone()["n"] or 0
+        # Week comparison (last 7 days excluding today)
+        week_row = c.execute(
+            """SELECT
+                 COALESCE(SUM(duration_sec) / 7.0, 0) AS daily_avg_sec,
+                 COALESCE(SUM(cost_estimated) / 7.0, 0) AS daily_avg_cost
+               FROM events
+               WHERE date(started_at) BETWEEN ? AND date(?, '-1 day')
+                 AND source != 'git'""",
+            (week_ago, today_iso),
+        ).fetchone()
+        week_avg_h = (week_row["daily_avg_sec"] or 0) / 3600
+
+    # Trend arrow vs week average
+    if week_avg_h > 0:
+        delta_pct = ((today_h - week_avg_h) / week_avg_h) * 100
+        if abs(delta_pct) < 5:
+            arrow, color = "→", "white"
+        elif delta_pct > 0:
+            arrow, color = "↗", "green"
+        else:
+            arrow, color = "↘", "yellow"
+        trend_str = f" [{color}]{arrow} {delta_pct:+.0f}% vs 7d avg[/{color}]"
+    else:
+        trend_str = ""
+
+    now = datetime.now().strftime("%H:%M")
+    pulse_line = (
+        f"[bold cyan]🚀 {now}[/bold cyan] · "
+        f"[bold]{today_h:.1f}h[/bold] active · "
+        f"[bold]${today_cost:.0f}[/bold] · "
+        f"[bold]{today_commits}[/bold] commits · "
+        f"[bold]{today_sources}[/bold] sources active"
+        f"{trend_str}"
+    )
+    console.print(pulse_line)
+
+
 @cli.command()
 @click.option("--since", default="30d", help="Window ex: 7d, 30d, 90d")
 def highlights(since: str):
@@ -2502,7 +2655,13 @@ def audit(since: str):
     is_flag=True,
     help="Ecrit les paths decouverts dans privacy.yaml (section discovered_paths).",
 )
-def discover(save: bool):
+@click.option(
+    "--github",
+    "github_owner",
+    default=None,
+    help="GitHub owner/org : liste les repos GitHub et suggere des aliases pour ceux qui ont une activite locale non-mappee.",
+)
+def discover(save: bool, github_owner: str | None):
     """Scan HOME pour trouver tous les emplacements d'outils IA (Claude Code, Codex, Cursor).
 
     Utile si tu as des installs dans des dossiers non-standard. Par defaut
@@ -2511,7 +2670,14 @@ def discover(save: bool):
 
     Avec --save, ajoute les paths trouves a privacy.yaml → pris en compte
     au prochain `tracker ingest`.
+
+    Avec --github <owner>, interroge l'API GitHub (via `gh` CLI) pour
+    lister les repos de ton org/user et suggere les aliases necessaires
+    pour les project_ids qui ne matchent pas un repo connu.
     """
+    if github_owner:
+        _discover_github(github_owner)
+        return
     import yaml as _yaml
 
     from ship1000x.core.discovery import discover_paths
