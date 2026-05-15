@@ -28,9 +28,9 @@ import json
 import os
 from datetime import datetime, timedelta, timezone
 from typing import Any
+from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
-from urllib.error import HTTPError, URLError
 
 OPENAI_API_BASE = "https://api.openai.com"
 

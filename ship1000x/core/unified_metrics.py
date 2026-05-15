@@ -23,12 +23,12 @@ meme valeur. Pas de recalcul a la volee.
 from __future__ import annotations
 
 import json
+from collections.abc import Iterable
 from datetime import datetime, timezone
-from typing import Any, Iterable, Optional
+from typing import Any
 
 from ship1000x.core.cadence import HUMAN_CODES, get_cadence_profile
 from ship1000x.core.storage import Storage
-
 
 # Sources qui emettent un event_timeline humain dans raw_meta.
 # Sync avec core.cadence._SOURCES_WITH_TIMELINE.
@@ -50,7 +50,7 @@ DEDUP_TOLERANCE_SEC = 2
 
 
 def _fetch_event_timelines_for_day(
-    storage: Storage, day: str, machine_id: Optional[str] = None,
+    storage: Storage, day: str, machine_id: str | None = None,
 ) -> list[tuple[str, list[list[int]]]]:
     """Recupere les event_timeline JSON de tous les events d'un jour.
 
@@ -147,9 +147,9 @@ def compute_active_sec_with_threshold(
 def compute_unified_metrics(
     storage: Storage,
     day: str,
-    user_email: Optional[str] = None,
-    machine_id: Optional[str] = None,
-) -> Optional[dict]:
+    user_email: str | None = None,
+    machine_id: str | None = None,
+) -> dict | None:
     """Calcule les 5 metriques unifiees pour un jour donne.
 
     Returns dict avec :
@@ -232,8 +232,8 @@ def upsert_daily_unified(storage: Storage, metrics: dict) -> None:
 
 
 def get_daily_unified(
-    storage: Storage, day: str, machine_id: Optional[str] = None,
-) -> Optional[dict]:
+    storage: Storage, day: str, machine_id: str | None = None,
+) -> dict | None:
     """Lit les metriques unifiees d'un jour. Returns None si jamais calcule."""
     where = "date = ?"
     params: list[Any] = [day]

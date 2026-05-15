@@ -1,10 +1,10 @@
 """Tests unitaires pour core/intervals.py — union cross-sources et compute unified."""
 
 import unittest
-from datetime import datetime, timezone
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+from ship1000x.core.storage import Storage
 from ship1000x.core.unified_metrics import (
     DEDUP_TOLERANCE_SEC,
     THRESHOLD_LOOSE_SEC,
@@ -15,7 +15,6 @@ from ship1000x.core.unified_metrics import (
     merge_human_events_cross_sources,
     upsert_daily_unified,
 )
-from ship1000x.core.storage import Storage
 
 
 class TestMergeHumanEventsCrossSources(unittest.TestCase):
