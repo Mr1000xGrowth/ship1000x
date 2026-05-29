@@ -137,6 +137,11 @@ CREATE TABLE IF NOT EXISTS daily_unified (
     active_sec_unified  INTEGER DEFAULT 0,    -- = active_sec_p95, alias canonique V1
     -- Estimations complementaires :
     agent_sec_estimated INTEGER DEFAULT 0,    -- wall_clock - active_sec_unified (best effort)
+    agent_sec_additive  INTEGER DEFAULT 0,    -- somme des durees de session (parallelisme
+                                              -- inclus, NON deduplique). Peut depasser 24h :
+                                              -- = debit cumule quand plusieurs sessions
+                                              -- tournent en parallele. Ratio /active_sec_unified
+                                              -- = facteur d'orchestration.
     wall_clock_sec      INTEGER DEFAULT 0,    -- (last_event - first_event) cross-sources
     -- Audit :
     threshold_used_sec  INTEGER DEFAULT 0,    -- valeur exacte du seuil P95 utilise
@@ -250,6 +255,13 @@ class SQLiteStorage:
         #                                            'shared' (hybride A+C selon plan)
         if not has_column("events", "machine_id"):
             c.execute("ALTER TABLE events ADD COLUMN machine_id TEXT")
+
+        # Temps agents additif (debit cumule, parallelisme inclus, peut > 24h).
+        # Distinct de active_sec_unified (presence humaine dedupliquee, <= 24h).
+        if not has_column("daily_unified", "agent_sec_additive"):
+            c.execute(
+                "ALTER TABLE daily_unified ADD COLUMN agent_sec_additive INTEGER DEFAULT 0"
+            )
 
         # Migration daily_rollup : ancien schema PK = (date, project_id, source).
         # Si on detecte ca et qu'on n'a pas encore migre, on recree la table

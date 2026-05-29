@@ -28,24 +28,56 @@
     <div class="grid grid-cols-1 sm:grid-cols-3 gap-px bg-mist dark:bg-slate border border-mist dark:border-slate rounded-lg overflow-hidden">
 
       <div class="metric-card bg-paper dark:bg-graphite p-7">
-        <div class="text-[11px] uppercase tracking-[0.15em] text-stone font-medium">Your active time</div>
+        <div class="text-[11px] uppercase tracking-[0.15em] text-stone font-medium">Your real human time</div>
         <div class="mt-3 font-display text-4xl text-ink dark:text-paper font-numeric" id="metric-active">—</div>
-        <div class="text-[11px] text-stone mt-2 italic">P95 personal cadence</div>
+        <div class="text-[11px] text-stone mt-2 italic">deduplicated · ≤ 24h/day</div>
       </div>
 
       <div class="metric-card bg-paper dark:bg-graphite p-7">
-        <div class="text-[11px] uppercase tracking-[0.15em] text-stone font-medium">Wall calendar</div>
-        <div class="mt-3 font-display text-4xl text-ink dark:text-paper font-numeric" id="metric-wall">—</div>
-        <div class="text-[11px] text-stone mt-2 italic">first → last event, raw</div>
+        <div class="text-[11px] uppercase tracking-[0.15em] text-stone font-medium">Cumulative work (∥)</div>
+        <div class="mt-3 font-display text-4xl text-ink dark:text-paper font-numeric" id="metric-cumulative">—</div>
+        <div class="text-[11px] text-stone mt-2 italic" id="metric-orchestration">human + agents, parallel sessions add up</div>
       </div>
 
       <div class="metric-card bg-paper dark:bg-graphite p-7">
         <div class="text-[11px] uppercase tracking-[0.15em] text-stone font-medium">Person-days equiv.</div>
         <div class="mt-3 font-display text-4xl text-ink dark:text-paper font-numeric" id="metric-days">—</div>
-        <div class="text-[11px] text-stone mt-2 italic">your active / 8h</div>
+        <div class="text-[11px] text-stone mt-2 italic">your real time / 8h</div>
       </div>
 
     </div>
+  </section>
+
+  <!-- TOKENS — factual provider counters -->
+  <section class="space-y-4">
+    <div class="flex items-baseline justify-between">
+      <div>
+        <div class="text-[11px] uppercase tracking-[0.2em] text-stone font-medium">Tokens · provider counters</div>
+        <div class="text-xs text-stone mt-1">exact provider counts, decomposed — never a bare total</div>
+      </div>
+      <span class="text-[10px] uppercase tracking-[0.2em] text-sage font-medium">Factual</span>
+    </div>
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-px bg-mist dark:bg-slate border border-mist dark:border-slate rounded-lg overflow-hidden">
+      <div class="metric-card bg-paper dark:bg-graphite p-7">
+        <div class="text-[11px] uppercase tracking-[0.15em] text-stone font-medium">Input</div>
+        <div class="mt-3 font-display text-4xl text-ink dark:text-paper font-numeric" id="tok-input">—</div>
+        <div class="text-[11px] text-stone mt-2 italic" id="tok-input-detail">fresh · cache read · cache write</div>
+      </div>
+      <div class="metric-card bg-paper dark:bg-graphite p-7">
+        <div class="text-[11px] uppercase tracking-[0.15em] text-stone font-medium">Output</div>
+        <div class="mt-3 font-display text-4xl text-ink dark:text-paper font-numeric" id="tok-output">—</div>
+        <div class="text-[11px] text-stone mt-2 italic" id="tok-output-detail">incl. reasoning / thinking</div>
+      </div>
+      <div class="metric-card bg-paper dark:bg-graphite p-7">
+        <div class="text-[11px] uppercase tracking-[0.15em] text-stone font-medium">Cache efficiency</div>
+        <div class="mt-3 font-display text-4xl text-ink dark:text-paper font-numeric" id="tok-cache-pct">—</div>
+        <div class="text-[11px] text-stone mt-2 italic">share of input served by cache</div>
+      </div>
+    </div>
+    <p class="text-xs text-stone italic pl-1">
+      ℹ Exact provider counters (not estimates). ~99% of this volume is subscription usage —
+      real, but not invoice-itemized per token. Deduplicated by Anthropic/OpenAI message id.
+    </p>
   </section>
 
   <!-- R1 — TIME LEVERAGE -->
@@ -57,18 +89,12 @@
       </div>
       <span class="text-[10px] uppercase tracking-[0.2em] text-sage font-medium">Measured · Factual</span>
     </div>
-    <div class="grid grid-cols-1 sm:grid-cols-2 gap-px bg-mist dark:bg-slate border border-mist dark:border-slate rounded-lg overflow-hidden">
+    <div class="grid grid-cols-1 gap-px bg-mist dark:bg-slate border border-mist dark:border-slate rounded-lg overflow-hidden">
 
       <div class="metric-card bg-paper dark:bg-graphite p-7">
         <div class="text-[11px] uppercase tracking-[0.15em] text-stone font-medium">Time leverage</div>
         <div class="mt-3 font-display text-5xl text-ink dark:text-paper font-numeric" id="metric-leverage">—</div>
-        <div class="text-[11px] text-stone mt-2 italic">capped 5× per source · anti-inflation</div>
-      </div>
-
-      <div class="metric-card bg-paper dark:bg-graphite p-7">
-        <div class="text-[11px] uppercase tracking-[0.15em] text-stone font-medium">Parallel agents</div>
-        <div class="mt-3 font-display text-5xl text-ink dark:text-paper font-numeric" id="metric-parallelism">—</div>
-        <div class="text-[11px] text-stone mt-2 italic">avg simultaneous IA sessions</div>
+        <div class="text-[11px] text-stone mt-2 italic">cumulative work ÷ your real human time · real engaged time, no cap</div>
       </div>
 
     </div>
@@ -193,7 +219,7 @@
   <section class="space-y-4">
     <div class="flex items-baseline justify-between">
       <h2 class="font-display text-2xl tracking-tight">Daily activity</h2>
-      <span class="text-xs text-stone italic">unified active vs wall-clock, hours per day</span>
+      <span class="text-xs text-stone italic">your real human time vs cumulative work (human + agents ∥), hours per day</span>
     </div>
     <div class="bg-paper dark:bg-graphite border border-mist dark:border-slate rounded-lg p-6">
       <canvas id="trend-chart" height="80"></canvas>
@@ -267,10 +293,26 @@ async function loadHighlights(days) {
   try {
     const h = await fetchJSON(`/api/highlights?days=${days}`);
     document.getElementById('metric-active').textContent = `${h.active_hours}h`;
-    document.getElementById('metric-wall').textContent = `${h.wall_hours}h`;
+    document.getElementById('metric-cumulative').textContent = `${h.agent_hours_additive}h`;
+    if (h.orchestration_factor) {
+      document.getElementById('metric-orchestration').textContent =
+        `human + agents · ×${h.orchestration_factor} orchestration`;
+    }
     document.getElementById('metric-days').textContent = h.days_equivalent;
-    document.getElementById('metric-leverage').textContent = `×${h.leverage}`;
-    document.getElementById('metric-parallelism').textContent = h.parallelism;
+    document.getElementById('metric-leverage').textContent = `×${h.orchestration_factor}`;
+    // Tokens factuels (compteurs fournisseur, décomposés)
+    const tk = h.tokens || {raw: {}, fmt: {}, input_total: 0};
+    const tf = tk.fmt || {};
+    const tr = tk.raw || {};
+    const fmtBig = (n) => (n >= 1e9 ? (n/1e9).toFixed(2)+' Md' : n >= 1e6 ? (n/1e6).toFixed(1)+' M' : n >= 1e3 ? (n/1e3).toFixed(0)+' k' : String(n|0));
+    document.getElementById('tok-input').textContent = fmtBig(tk.input_total || 0);
+    document.getElementById('tok-input-detail').textContent =
+      `fresh ${tf.fresh_input||'0'} · cache read ${tf.cache_read||'0'} · cache write ${fmtBig((tr.cache_write_5m||0)+(tr.cache_write_1h||0))}`;
+    document.getElementById('tok-output').textContent = tf.output_tokens || '0';
+    document.getElementById('tok-output-detail').textContent =
+      `reasoning ${tf.reasoning||'0'} · thinking ${tf.thinking||'0'}`;
+    const cachePct = (tk.input_total || 0) > 0 ? Math.round(100*(tr.cache_read||0)/tk.input_total) : 0;
+    document.getElementById('tok-cache-pct').textContent = `${cachePct}%`;
     document.getElementById('metric-lines').textContent = fmtInt(h.lines_real);
     document.getElementById('metric-lines-pct').textContent = `${h.real_pct}% of raw · git-line factual`;
     document.getElementById('metric-cost').textContent = fmtCurrency(h.cost_api_equivalent);
@@ -424,25 +466,27 @@ async function loadTrend(days) {
       data: {
         labels: data.map(d => d.date.slice(5)),  // MM-DD
         datasets: [{
-          label: 'Active (unified)',
+          label: 'Cumulative work (human + agents ∥)',
+          data: data.map(d => d.agent_hours_additive),
+          borderColor: '#6b8e7a',
+          backgroundColor: 'rgba(107, 142, 122, 0.08)',
+          tension: 0.35,
+          fill: true,
+          borderWidth: 2,
+          pointRadius: 0,
+          pointHoverRadius: 4,
+          pointHoverBackgroundColor: '#6b8e7a',
+        }, {
+          label: 'Your real human time',
           data: data.map(d => d.active_hours),
           borderColor: '#c8a464',
-          backgroundColor: 'rgba(200, 164, 100, 0.06)',
+          backgroundColor: 'rgba(200, 164, 100, 0.10)',
           tension: 0.35,
           fill: true,
           borderWidth: 2,
           pointRadius: 0,
           pointHoverRadius: 4,
           pointHoverBackgroundColor: '#c8a464',
-        }, {
-          label: 'Wall clock',
-          data: data.map(d => d.wall_hours),
-          borderColor: isDark ? '#78716c' : '#a8a29e',
-          backgroundColor: 'transparent',
-          borderDash: [3, 4],
-          tension: 0.35,
-          borderWidth: 1,
-          pointRadius: 0,
         }],
       },
       options: {

@@ -164,16 +164,16 @@ class TestComputeUnifiedMetricsIntegration(unittest.TestCase):
 
     def test_no_events_returns_none(self):
         """Aucun event -> None."""
-        result = compute_unified_metrics(self.storage, "2026-05-14")
+        result = compute_unified_metrics(self.storage, "2024-05-13")
         self.assertIsNone(result)
 
     def test_single_source_single_session(self):
         """1 source, 1 session avec 3 events humains -> active calcule correctement."""
         # 3 events espaces de 60 sec
         timeline = [[1715641200, 0], [1715641260, 1], [1715641320, 0]]
-        self._insert_event("e1", "claude_code", "2026-05-14T00:00:00Z", timeline)
+        self._insert_event("e1", "claude_code", "2024-05-13T00:00:00Z", timeline)
 
-        result = compute_unified_metrics(self.storage, "2026-05-14", machine_id="test-machine")
+        result = compute_unified_metrics(self.storage, "2024-05-13", machine_id="test-machine")
         self.assertIsNotNone(result)
         # 2 intervalles de 60 sec chacun -> 120 sec strict
         self.assertEqual(result["active_sec_strict"], 120)
@@ -184,12 +184,12 @@ class TestComputeUnifiedMetricsIntegration(unittest.TestCase):
     def test_multi_sources_parallel_dedup(self):
         """2 sources en parallele -> events dedupliques, sources_count=2."""
         # Claude code + Codex MacApp voient le meme prompt a +/- 1s
-        self._insert_event("e1", "claude_code", "2026-05-14T00:00:00Z",
+        self._insert_event("e1", "claude_code", "2024-05-13T00:00:00Z",
                            [[1715641200, 0], [1715641260, 0]])
-        self._insert_event("e2", "codex_macapp", "2026-05-14T00:00:00Z",
+        self._insert_event("e2", "codex_macapp", "2024-05-13T00:00:00Z",
                            [[1715641201, 0], [1715641261, 0]])  # +/- 1s
 
-        result = compute_unified_metrics(self.storage, "2026-05-14", machine_id="test-machine")
+        result = compute_unified_metrics(self.storage, "2024-05-13", machine_id="test-machine")
         self.assertEqual(result["sources_count"], 2)
         # 4 events bruts mais 2 dedupliques -> 1 intervalle de 60 sec
         self.assertEqual(result["sample_size"], 2)
@@ -197,36 +197,36 @@ class TestComputeUnifiedMetricsIntegration(unittest.TestCase):
 
     def test_unified_alias_matches_p95(self):
         """active_sec_unified = active_sec_p95 (alias canonique V1)."""
-        self._insert_event("e1", "claude_code", "2026-05-14T00:00:00Z",
+        self._insert_event("e1", "claude_code", "2024-05-13T00:00:00Z",
                            [[1715641200, 0], [1715641260, 0]])
-        result = compute_unified_metrics(self.storage, "2026-05-14", machine_id="test-machine")
+        result = compute_unified_metrics(self.storage, "2024-05-13", machine_id="test-machine")
         self.assertEqual(result["active_sec_unified"], result["active_sec_p95"])
 
     def test_loose_geq_strict(self):
         """Mode loose >= strict toujours."""
         # Intervalles 3min puis 8min
-        self._insert_event("e1", "claude_code", "2026-05-14T00:00:00Z",
+        self._insert_event("e1", "claude_code", "2024-05-13T00:00:00Z",
                            [[1715641200, 0], [1715641380, 0], [1715641860, 0]])
-        result = compute_unified_metrics(self.storage, "2026-05-14", machine_id="test-machine")
+        result = compute_unified_metrics(self.storage, "2024-05-13", machine_id="test-machine")
         self.assertGreaterEqual(result["active_sec_loose"], result["active_sec_strict"])
 
     def test_persistence_roundtrip(self):
         """upsert + get -> roundtrip correct."""
-        self._insert_event("e1", "claude_code", "2026-05-14T00:00:00Z",
+        self._insert_event("e1", "claude_code", "2024-05-13T00:00:00Z",
                            [[1715641200, 0], [1715641260, 0]])
-        metrics = compute_unified_metrics(self.storage, "2026-05-14", machine_id="test-machine")
+        metrics = compute_unified_metrics(self.storage, "2024-05-13", machine_id="test-machine")
         upsert_daily_unified(self.storage, metrics)
 
-        loaded = get_daily_unified(self.storage, "2026-05-14", machine_id="test-machine")
+        loaded = get_daily_unified(self.storage, "2024-05-13", machine_id="test-machine")
         self.assertIsNotNone(loaded)
         self.assertEqual(loaded["active_sec_strict"], metrics["active_sec_strict"])
         self.assertEqual(loaded["sample_size"], metrics["sample_size"])
 
     def test_upsert_idempotent(self):
         """Re-upsert sur meme (date, machine) -> update, pas de duplicate."""
-        self._insert_event("e1", "claude_code", "2026-05-14T00:00:00Z",
+        self._insert_event("e1", "claude_code", "2024-05-13T00:00:00Z",
                            [[1715641200, 0], [1715641260, 0]])
-        m1 = compute_unified_metrics(self.storage, "2026-05-14", machine_id="test-machine")
+        m1 = compute_unified_metrics(self.storage, "2024-05-13", machine_id="test-machine")
         upsert_daily_unified(self.storage, m1)
         upsert_daily_unified(self.storage, m1)  # 2e fois
 
@@ -237,10 +237,10 @@ class TestComputeUnifiedMetricsIntegration(unittest.TestCase):
     def test_arithmetic_consistency(self):
         """Verification : active_sec_p95 + agent_sec_estimated = wall_clock_sec."""
         # Events espaces : 0s, 60s, 120s, 5400s (90min de pause), 5460s
-        self._insert_event("e1", "claude_code", "2026-05-14T00:00:00Z",
+        self._insert_event("e1", "claude_code", "2024-05-13T00:00:00Z",
                            [[1715641200, 0], [1715641260, 0], [1715641320, 0],
                             [1715646720, 0], [1715646780, 0]])
-        result = compute_unified_metrics(self.storage, "2026-05-14", machine_id="test-machine")
+        result = compute_unified_metrics(self.storage, "2024-05-13", machine_id="test-machine")
         self.assertEqual(
             result["active_sec_p95"] + result["agent_sec_estimated"],
             result["wall_clock_sec"],

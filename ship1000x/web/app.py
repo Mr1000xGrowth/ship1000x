@@ -23,6 +23,7 @@ from ship1000x.core.cost_truth import (
     event_cost_truth,
     safe_raw_meta,
 )
+from ship1000x.core.usage import format_token_count as _fmt_tok
 
 
 def _cost_presentation(
@@ -166,7 +167,7 @@ def create_app(db_path: Path, config_dir: Path) -> Flask:
         with storage.conn() as conn:
             unif = conn.execute(
                 "SELECT SUM(active_sec_unified) AS u, SUM(wall_clock_sec) AS w, "
-                "AVG(threshold_used_sec) AS thr "
+                "SUM(agent_sec_additive) AS aa, AVG(threshold_used_sec) AS thr "
                 "FROM daily_unified WHERE date >= date('now', ? || ' days')",
                 (f"-{days}",),
             ).fetchone()
@@ -185,28 +186,32 @@ def create_app(db_path: Path, config_dir: Path) -> Flask:
                 "WHERE date(started_at) >= date('now', ? || ' days')",
                 (f"-{days}",),
             ).fetchone()["n"] or 0
-            # Wall_brut capped 5x duration_sec per source
-            rows_per_source = conn.execute(
-                """SELECT source, SUM(duration_sec) AS dur, SUM(wall_clock_sec) AS wall
-                   FROM events WHERE date(started_at) >= date('now', ? || ' days') AND source != 'git'
-                   GROUP BY source""",
-                (f"-{days}",),
-            ).fetchall()
             cost_truth = _compute_cost_truth(conn, days)
+            # Tokens FACTUELS — somme du superset usage_breakdown (capture
+            # exhaustive). Compteurs fournisseur, decomposes (jamais un total nu).
+            def _sum_ub(field: str) -> int:
+                return conn.execute(
+                    "SELECT SUM(CAST(COALESCE("
+                    f"json_extract(raw_meta, '$.usage_breakdown.{field}'), 0) AS INTEGER)) AS s "
+                    "FROM events WHERE source != 'git' "
+                    "AND date(started_at) >= date('now', ? || ' days')",
+                    (f"-{days}",),
+                ).fetchone()["s"] or 0
+            tok = {f: _sum_ub(f) for f in (
+                "fresh_input", "cache_read", "cache_write_5m", "cache_write_1h",
+                "output_tokens", "thinking", "reasoning",
+                "web_search_requests", "web_fetch_requests",
+            )}
 
         active_h = (unif["u"] or 0) / 3600
         wall_h = (unif["w"] or 0) / 3600
+        agent_additive_h = (unif["aa"] or 0) / 3600
         threshold_min = (unif["thr"] or 0) / 60
-
-        wall_brut_capped = 0
-        for r in rows_per_source:
-            d = r["dur"] or 0
-            w = r["wall"] or 0
-            wall_brut_capped += min(w, d * 5) if d > 0 else 0
-
-        leverage = (wall_brut_capped / 3600 / active_h) if active_h else 0
-        presence = (wall_h / active_h) if active_h else 0
-        parallelism = (leverage / presence) if presence else 0
+        # Levier unique = heures de travail cumulees (sessions //, humain + agents)
+        # par heure de presence humaine reelle dedupliquee. > 1 = pilotage en
+        # parallele. Base sur le temps reellement engage (pas le temps "app
+        # ouverte"), donc auditable et sans plafond heuristique.
+        orchestration_factor = (agent_additive_h / active_h) if active_h else 0
         days_equivalent = active_h / 8
         api_equivalent_cost = float(cost_truth.get("api_equivalent_usd") or 0.0)
         cost_factual = float(cost_truth.get("native_token_pricing_usd") or 0.0)
@@ -221,11 +226,17 @@ def create_app(db_path: Path, config_dir: Path) -> Flask:
         return jsonify({
             "schema_version": "ship1000x.dashboard.highlights.v1",
             "window_days": days,
-            "leverage": round(leverage, 2),
-            "parallelism": round(parallelism, 2),
             "days_equivalent": round(days_equivalent, 1),
             "active_hours": round(active_h, 1),
             "wall_hours": round(wall_h, 1),
+            "agent_hours_additive": round(agent_additive_h, 1),
+            "orchestration_factor": round(orchestration_factor, 2),
+            "tokens": {
+                "raw": tok,
+                "fmt": {k: _fmt_tok(v) for k, v in tok.items()},
+                "input_total": tok["fresh_input"] + tok["cache_read"]
+                + tok["cache_write_5m"] + tok["cache_write_1h"],
+            },
             "lines_real": lines_real,
             "lines_raw": lines_raw,
             "real_pct": round(real_pct, 1),
@@ -250,6 +261,7 @@ def create_app(db_path: Path, config_dir: Path) -> Flask:
             rows = conn.execute(
                 """SELECT date,
                           active_sec_unified AS active_sec,
+                          agent_sec_additive,
                           wall_clock_sec
                    FROM daily_unified
                    WHERE date >= date('now', ? || ' days')
@@ -261,6 +273,7 @@ def create_app(db_path: Path, config_dir: Path) -> Flask:
                 "schema_version": "ship1000x.dashboard.trend_point.v1",
                 "date": r["date"],
                 "active_hours": round((r["active_sec"] or 0) / 3600, 2),
+                "agent_hours_additive": round((r["agent_sec_additive"] or 0) / 3600, 2),
                 "wall_hours": round((r["wall_clock_sec"] or 0) / 3600, 2),
             }
             for r in rows

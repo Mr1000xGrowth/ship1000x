@@ -165,7 +165,7 @@ class TestDashboardSmoke(unittest.TestCase):
         data = r.get_json()
         self.assertEqual(data["schema_version"], "ship1000x.dashboard.highlights.v1")
         # Must contain these keys
-        for key in ("leverage", "parallelism", "days_equivalent", "active_hours",
+        for key in ("orchestration_factor", "agent_hours_additive", "days_equivalent", "active_hours",
                     "lines_real", "cost_api_equivalent", "cost_total", "trust_score", "trust_label",
                     "trust_robustness", "sources_count", "threshold_min", "window_days",
                     "cost_total_basis", "schema_version"):

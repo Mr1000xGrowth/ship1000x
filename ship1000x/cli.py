@@ -514,6 +514,12 @@ def _print_compare_modes(storage: Storage, day: str) -> None:
     table.add_row("  travail autonome IA", "—",
                   _fmt_duration(unified["agent_sec_estimated"]),
                   "[dim]wall - actif humain auto[/dim]")
+    additive = unified.get("agent_sec_additive") or 0
+    human_p95 = unified["active_sec_p95"] or 0
+    ratio = (additive / human_p95) if human_p95 else 0
+    ratio_note = f"[dim]somme sessions //, peut > 24h · x{ratio:.1f} vs humain[/dim]"
+    table.add_row("  debit cumule (//)", "—",
+                  _fmt_duration(additive), ratio_note)
 
     table.add_section()
     table.add_row("[dim]TOTAL[/dim]", "", "", "")
@@ -1211,6 +1217,7 @@ def rollup(since: str):
     """(Re)calcule les daily_rollup agreges depuis les events."""
     from ship1000x.core.cadence import refresh_user_cadence
     from ship1000x.core.rollup import rebuild_rollups
+    from ship1000x.core.unified_metrics import rebuild_unified_metrics
     storage = _get_storage()
     cutoff = _parse_since(since) or (datetime.now() - timedelta(days=180))
     stats = rebuild_rollups(storage, cutoff)
@@ -1235,30 +1242,14 @@ def rollup(since: str):
             "(< 50 transitions inter-prompts dans la fenetre)"
         )
 
-    # Rebuild de daily_unified (table lue par le dashboard "Daily activity" et
-    # le robustness check "Cross-source unified"). Calcule jour par jour sur la
-    # fenetre, avec le P95 cadence fraichement rafraichi ci-dessus. Sans ce
-    # rebuild, daily_unified restait fige et le dashboard gelait a la derniere
-    # date calculee.
-    from ship1000x.core.storage import _current_machine_id
-    from ship1000x.core.unified_metrics import (
-        compute_unified_metrics,
-        upsert_daily_unified,
+    # daily_unified : temps actif unifie cross-sources (union d'intervalles +
+    # ecarts). Source de verite du graphe "Daily activity" du dashboard.
+    # Apres refresh cadence pour que le threshold P95 soit a jour.
+    u_stats = rebuild_unified_metrics(storage, cutoff, user_email=user_email)
+    console.print(
+        f"[green]✓[/green] Unified : {u_stats['unified_rows']} lignes "
+        f"sur {u_stats['days']} jours"
     )
-
-    machine_id = _current_machine_id()
-    day = cutoff.date()
-    end = datetime.now().date()
-    unified_days = 0
-    while day <= end:
-        metrics = compute_unified_metrics(
-            storage, day.isoformat(), user_email=user_email, machine_id=machine_id
-        )
-        if metrics:
-            upsert_daily_unified(storage, metrics)
-            unified_days += 1
-        day += timedelta(days=1)
-    console.print(f"[green]✓[/green] Daily unified : {unified_days} jours recalcules")
 
 
 @cli.command("backfill-machine-id")
@@ -2083,10 +2074,10 @@ def install_scheduler_cmd(time_str: str):
         return
 
     try:
-        plist = scheduler_install(REPO_ROOT, hour, minute)
+        plist = scheduler_install(hour, minute)
         console.print(f"[green]✓[/green] Scheduler installe : {plist}")
         console.print(f"  Prochain run : chaque jour a {time_str}")
-        console.print(f"  Logs : {REPO_ROOT}/db/cron.log et cron.err.log")
+        console.print("  Logs : ~/Library/Logs/ship1000x-daily.log et .err.log")
     except RuntimeError as e:
         console.print(f"[red]✗[/red] {e}")
 
@@ -2449,11 +2440,10 @@ def highlights(since: str):
     with storage.conn() as conn:
         unif = conn.execute(
             "SELECT SUM(active_sec_unified) AS u, SUM(wall_clock_sec) AS w, "
-            "AVG(threshold_used_sec) AS thr "
+            "SUM(agent_sec_additive) AS aa, AVG(threshold_used_sec) AS thr "
             "FROM daily_unified WHERE date >= date('now', ? || ' days')",
             (f"-{days}",),
         ).fetchone()
-        # Wall_clock summed by source (for "leverage" multiplier - reflects parallelism)
         # Operator-facing API-equivalent cost.
         cost_rows = conn.execute(
             "SELECT cost_estimated, raw_meta FROM events "
@@ -2480,7 +2470,8 @@ def highlights(since: str):
         ).fetchone()["n"] or 0
 
     active_h = (unif["u"] or 0) / 3600
-    wall_h = (unif["w"] or 0) / 3600
+    agent_additive_h = (unif["aa"] or 0) / 3600
+    orchestration_factor = (agent_additive_h / active_h) if active_h else 0
     threshold_min = (unif["thr"] or 0) / 60
 
     # Cost split factual vs heuristic. Prefer explicit raw_meta.usage quality;
@@ -2489,27 +2480,9 @@ def highlights(since: str):
         cost_factual = _sum_quality_aware_factual_cost(conn, days)
     cost_factual_pct = (cost_factual / cost * 100) if cost else 0
 
-    # Cap wall_brut for sources where wall_clock/duration > 5x (signal "app open without active use")
-    # We use a defensible heuristic : cap each source's wall_clock at duration * 5
-    with storage.conn() as conn:
-        rows_per_source = conn.execute(
-            """SELECT source, SUM(duration_sec) AS dur, SUM(wall_clock_sec) AS wall
-               FROM events WHERE date(started_at) >= date('now', ? || ' days') AND source != 'git'
-               GROUP BY source""",
-            (f"-{days}",),
-        ).fetchall()
-    wall_brut_capped = 0
-    for r in rows_per_source:
-        d = r["dur"] or 0
-        w = r["wall"] or 0
-        # Cap at 5x duration (defensible : an app cannot be "active" 5x longer than typed time
-        # without becoming a signal of "app open without use")
-        wall_brut_capped += min(w, d * 5) if d > 0 else 0
-
-    # Multipliers (defensible) :
-    presence = (wall_h / active_h) if active_h else 0
-    levier = (wall_brut_capped / 3600 / active_h) if active_h else 0
-    parallelism = (levier / presence) if presence else 0
+    # Levier unique = travail cumule (sessions //, humain + agents) / temps
+    # humain reel dedupliquee. Base sur le temps reellement engage, pas le
+    # "temps app ouverte" : auditable, sans plafond heuristique.
     days_equivalent = active_h / 8  # 1 jour-homme = 8h ouvrées
     lines_per_hour = (lines_real / active_h) if active_h else 0
     cost_per_line = (cost / lines_real) if lines_real else 0
@@ -2522,7 +2495,6 @@ def highlights(since: str):
 
     # Confidence labels per metric (Factual/Defensible/Indicative)
     cf_lines = "[Factual]"  # git lines = ground truth
-    cf_levier = "[Defensible, capped]"  # capped wall_brut anti-inflation
     if cost_factual_pct >= 99.5:
         cf_cost = "[Factual]"
     else:
@@ -2534,9 +2506,11 @@ def highlights(since: str):
     # Format the showcase panel
     lines = []
     lines.append("")
-    lines.append(f"  [bold magenta]Effet de levier IA[/bold magenta]           [bold cyan]x{levier:.1f}[/bold cyan]        [dim]{cf_levier}[/dim]")
-    lines.append(f"  [bold magenta]Sessions IA en parallèle[/bold magenta]     [bold cyan]{parallelism:.1f}[/bold cyan]         [dim](moyenne, instances simultanées)[/dim]")
+    lines.append(f"  [bold magenta]Effet de levier IA[/bold magenta]           [bold cyan]x{orchestration_factor:.1f}[/bold cyan]        [dim]cumulé ÷ présence réelle[/dim]")
     lines.append(f"  [bold magenta]Équivalent jours-homme[/bold magenta]       [bold cyan]{days_equivalent:.0f} jours[/bold cyan]    [dim](en {days} jours cal.)[/dim]")
+    lines.append("")
+    lines.append(f"  [bold blue]Présence humaine réelle[/bold blue]     [bold cyan]{active_h:.0f} h[/bold cyan]       [dim]dédupliquée, ≤ 24h/j[/dim]")
+    lines.append(f"  [bold blue]Travail cumulé (//)[/bold blue]         [bold cyan]{agent_additive_h:.0f} h[/bold cyan]       [dim]humain + agents //[/dim]")
     lines.append("")
     lines.append(f"  [bold green]Production réelle[/bold green]            [bold cyan]{lines_real:,}[/bold cyan]   [dim]lignes vrai code ({real_pct:.0f}%) {cf_lines}[/dim]".replace(",", " "))
     lines.append(f"  [bold green]Coût API-equivalent[/bold green]          [bold cyan]${cost:,.0f}[/bold cyan]      [dim]{cf_cost}[/dim]".replace(",", " "))
@@ -2551,11 +2525,11 @@ def highlights(since: str):
             mark = "[green]✓[/green]" if chk["passed"] else "[red]✗[/red]"
             lines.append(f"    {mark} {chk['name']}  [dim]{chk['detail']}[/dim]")
     lines.append("")
-    lines.append(f"  [dim]→ Avec 1h de ton temps, tu génères ~{levier:.1f}h d'exécution agentique[/dim]")
-    lines.append(f"  [dim]  et {lines_per_hour:.0f} lignes de vrai code défendable.[/dim]")
+    lines.append(f"  [dim]→ Avec 1h de ta présence, ~{orchestration_factor:.1f}h de travail sont abattues[/dim]")
+    lines.append(f"  [dim]  (toi + agents en parallèle) et {lines_per_hour:.0f} lignes de vrai code défendable.[/dim]")
     lines.append("")
-    lines.append(f"  [dim italic]Calculé avec cap_time = {threshold_min:.1f} min (P95 personnel)[/dim italic]")
-    lines.append("  [dim italic]Wall_brut capped at 5x duration_sec per source (anti-inflation)[/dim italic]")
+    lines.append(f"  [dim italic]Présence calculée avec cap_time = {threshold_min:.1f} min (P95 personnel)[/dim italic]")
+    lines.append("  [dim italic]Travail cumulé = somme des durées de session (sessions // additionnées)[/dim italic]")
 
     title = f"🚀 Highlights — derniers {days} jours"
     panel = Panel("\n".join(lines), title=title, border_style="magenta", expand=False)
@@ -4133,7 +4107,7 @@ def doctor(fix: bool):
     # 5. Scheduler
     console.print("[bold]5. Scheduler (cron launchd)[/bold]")
     try:
-        from core import scheduler as _sched
+        from ship1000x.core import scheduler as _sched
         status = _sched.status()
         if isinstance(status, dict) and status.get("installed"):
             console.print(f"  [green]v[/green] Cron installe a {status.get('time', '-')}")
