@@ -1251,6 +1251,15 @@ def rollup(since: str):
         f"sur {u_stats['days']} jours"
     )
 
+    # daily_model_usage : cout + tokens par (jour, source, modele). Alimente
+    # la vue d'observabilite cout du dashboard. Agrege usage_breakdown x pricing.
+    from ship1000x.core.model_usage import rebuild_model_usage
+    m_stats = rebuild_model_usage(storage, cutoff)
+    console.print(
+        f"[green]✓[/green] Model usage : {m_stats['model_rows']} lignes "
+        f"sur {m_stats['days']} jours"
+    )
+
 
 @cli.command("backfill-machine-id")
 @click.pass_context

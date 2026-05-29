@@ -152,6 +152,38 @@ CREATE TABLE IF NOT EXISTS daily_unified (
 );
 
 CREATE INDEX IF NOT EXISTS idx_daily_unified_date ON daily_unified(date);
+
+-- Observabilite cout + tokens par (jour, machine, source, modele).
+-- Table LONGUE : un nouveau modele = de nouvelles lignes, jamais de colonnes.
+-- Agrege usage_breakdown (tokens par type) + cout API-equivalent + qualite
+-- de tarif. Regeneree par `ship1000x rollup` (idempotent).
+CREATE TABLE IF NOT EXISTS daily_model_usage (
+    date                 TEXT NOT NULL,
+    machine_id           TEXT NOT NULL DEFAULT 'unknown-machine',
+    source               TEXT NOT NULL,
+    provider             TEXT,
+    model                TEXT NOT NULL DEFAULT 'unknown',
+    -- tokens par type (somme du superset usage_breakdown) :
+    fresh_input          INTEGER DEFAULT 0,
+    cache_read           INTEGER DEFAULT 0,
+    cache_write_5m       INTEGER DEFAULT 0,
+    cache_write_1h       INTEGER DEFAULT 0,
+    output_tokens        INTEGER DEFAULT 0,
+    thinking             INTEGER DEFAULT 0,
+    reasoning            INTEGER DEFAULT 0,
+    web_search_requests  INTEGER DEFAULT 0,
+    -- cout :
+    cost_api_equivalent  REAL DEFAULT 0.0,   -- toujours (et-si facture au tarif API)
+    cost_billed          REAL DEFAULT 0.0,   -- 0 sous abonnement (oauth), estime sous api_key
+    auth_mode            TEXT,               -- oauth | api_key | unknown (dominant)
+    -- audit tarif :
+    pricing_quality      TEXT,               -- exact | fallback (tarif par defaut)
+    pricing_version      TEXT,
+    computed_at          TEXT NOT NULL,
+    PRIMARY KEY (date, machine_id, source, model)
+);
+
+CREATE INDEX IF NOT EXISTS idx_daily_model_usage_date ON daily_model_usage(date);
 """
 
 
