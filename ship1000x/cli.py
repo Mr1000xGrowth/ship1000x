@@ -1235,6 +1235,31 @@ def rollup(since: str):
             "(< 50 transitions inter-prompts dans la fenetre)"
         )
 
+    # Rebuild de daily_unified (table lue par le dashboard "Daily activity" et
+    # le robustness check "Cross-source unified"). Calcule jour par jour sur la
+    # fenetre, avec le P95 cadence fraichement rafraichi ci-dessus. Sans ce
+    # rebuild, daily_unified restait fige et le dashboard gelait a la derniere
+    # date calculee.
+    from ship1000x.core.storage import _current_machine_id
+    from ship1000x.core.unified_metrics import (
+        compute_unified_metrics,
+        upsert_daily_unified,
+    )
+
+    machine_id = _current_machine_id()
+    day = cutoff.date()
+    end = datetime.now().date()
+    unified_days = 0
+    while day <= end:
+        metrics = compute_unified_metrics(
+            storage, day.isoformat(), user_email=user_email, machine_id=machine_id
+        )
+        if metrics:
+            upsert_daily_unified(storage, metrics)
+            unified_days += 1
+        day += timedelta(days=1)
+    console.print(f"[green]✓[/green] Daily unified : {unified_days} jours recalcules")
+
 
 @cli.command("backfill-machine-id")
 @click.pass_context
