@@ -1,0 +1,573 @@
+{% extends "base.html" %}
+
+{% block title %}Overview · Ship1000x{% endblock %}
+
+{% block content %}
+<div class="space-y-12">
+
+  <header class="space-y-2">
+    <h1 class="font-display text-4xl tracking-tight">Overview</h1>
+    <p class="text-stone text-sm" id="window-label">Last 30 days</p>
+  </header>
+
+  <!-- Pedagogical banner : what this dashboard measures -->
+  <section class="border-l-2 border-ambre-500 pl-5 py-2">
+    <div class="text-[11px] uppercase tracking-[0.2em] text-stone font-medium mb-1">What this measures</div>
+    <p class="text-sm text-ink dark:text-paper">
+      Ship1000x reports <span class="font-medium">three distinct ratios</span> of AI leverage —
+      most dashboards mix them silently. Here they're separated, with their confidence label.
+    </p>
+  </section>
+
+  <!-- ENGAGEMENT -->
+  <section class="space-y-4">
+    <div class="flex items-baseline justify-between">
+      <div class="text-[11px] uppercase tracking-[0.2em] text-stone font-medium">Engagement</div>
+      <span class="text-[10px] uppercase tracking-[0.2em] text-sage font-medium">Factual</span>
+    </div>
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-px bg-mist dark:bg-slate border border-mist dark:border-slate rounded-lg overflow-hidden">
+
+      <div class="metric-card bg-paper dark:bg-graphite p-7">
+        <div class="text-[11px] uppercase tracking-[0.15em] text-stone font-medium">Your active time</div>
+        <div class="mt-3 font-display text-4xl text-ink dark:text-paper font-numeric" id="metric-active">—</div>
+        <div class="text-[11px] text-stone mt-2 italic">P95 personal cadence</div>
+      </div>
+
+      <div class="metric-card bg-paper dark:bg-graphite p-7">
+        <div class="text-[11px] uppercase tracking-[0.15em] text-stone font-medium">Wall calendar</div>
+        <div class="mt-3 font-display text-4xl text-ink dark:text-paper font-numeric" id="metric-wall">—</div>
+        <div class="text-[11px] text-stone mt-2 italic">first → last event, raw</div>
+      </div>
+
+      <div class="metric-card bg-paper dark:bg-graphite p-7">
+        <div class="text-[11px] uppercase tracking-[0.15em] text-stone font-medium">Person-days equiv.</div>
+        <div class="mt-3 font-display text-4xl text-ink dark:text-paper font-numeric" id="metric-days">—</div>
+        <div class="text-[11px] text-stone mt-2 italic">your active / 8h</div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- R1 — TIME LEVERAGE -->
+  <section class="space-y-4">
+    <div class="flex items-baseline justify-between">
+      <div>
+        <div class="text-[11px] uppercase tracking-[0.2em] text-stone font-medium">R1 · Time leverage</div>
+        <div class="text-xs text-stone mt-1">Cumulated work hours per hour of YOUR active time</div>
+      </div>
+      <span class="text-[10px] uppercase tracking-[0.2em] text-sage font-medium">Measured · Factual</span>
+    </div>
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-px bg-mist dark:bg-slate border border-mist dark:border-slate rounded-lg overflow-hidden">
+
+      <div class="metric-card bg-paper dark:bg-graphite p-7">
+        <div class="text-[11px] uppercase tracking-[0.15em] text-stone font-medium">Time leverage</div>
+        <div class="mt-3 font-display text-5xl text-ink dark:text-paper font-numeric" id="metric-leverage">—</div>
+        <div class="text-[11px] text-stone mt-2 italic">capped 5× per source · anti-inflation</div>
+      </div>
+
+      <div class="metric-card bg-paper dark:bg-graphite p-7">
+        <div class="text-[11px] uppercase tracking-[0.15em] text-stone font-medium">Parallel agents</div>
+        <div class="mt-3 font-display text-5xl text-ink dark:text-paper font-numeric" id="metric-parallelism">—</div>
+        <div class="text-[11px] text-stone mt-2 italic">avg simultaneous IA sessions</div>
+      </div>
+
+    </div>
+    <p class="text-xs text-stone italic pl-1">
+      ℹ For each hour you're active, this much total work happens (you + agents running in parallel).
+    </p>
+  </section>
+
+  <!-- R2 — AGENT EFFICIENCY -->
+  <section class="space-y-4">
+    <div class="flex items-baseline justify-between">
+      <div>
+        <div class="text-[11px] uppercase tracking-[0.2em] text-stone font-medium">R2 · Agent efficiency</div>
+        <div class="text-xs text-stone mt-1">How fast an IA agent is vs a human on the same task</div>
+      </div>
+      <span class="text-[10px] uppercase tracking-[0.2em] text-clay font-medium">Indicative · per-task</span>
+    </div>
+    <div class="bg-paper dark:bg-graphite border border-mist dark:border-slate rounded-lg p-7">
+      <div class="font-display text-3xl text-ink dark:text-paper font-numeric">10× — 50×</div>
+      <div class="text-xs text-stone mt-3 leading-relaxed">
+        <span class="font-medium">refactor ~30×</span> · <span class="font-medium">boilerplate ~50×</span> · <span class="font-medium">debug ~5×</span>
+        <br/>
+        <span class="italic">Not measured directly by Ship1000x — task-dependent.
+        See <a href="https://github.com/Mr1000xGrowth/ship1000x/blob/main/docs/METHODOLOGY.md" class="hover:text-ambre-500 transition underline">METHODOLOGY.md</a>.</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- R3 — PROJECT OUTPUT -->
+  <section class="space-y-4">
+    <div class="flex items-baseline justify-between">
+      <div>
+        <div class="text-[11px] uppercase tracking-[0.2em] text-stone font-medium">R3 · Project output vs human team</div>
+        <div class="text-xs text-stone mt-1">What you produced vs an equivalent human team's effort</div>
+      </div>
+      <span class="text-[10px] uppercase tracking-[0.2em] text-clay font-medium">Estimative · your input</span>
+    </div>
+
+    <div class="bg-paper dark:bg-graphite border border-mist dark:border-slate rounded-lg p-7 space-y-5">
+      <div>
+        <label for="r3-project" class="text-[11px] uppercase tracking-[0.15em] text-stone font-medium">Project</label>
+        <select id="r3-project" class="mt-2 w-full bg-paper dark:bg-graphite border border-mist dark:border-slate rounded-md px-3 py-2 text-sm text-ink dark:text-paper">
+          <option value="">Loading…</option>
+        </select>
+        <div id="r3-project-stats" class="mt-2 text-xs text-stone font-mono">—</div>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label for="r3-people" class="text-[11px] uppercase tracking-[0.15em] text-stone font-medium">Equivalent team — people</label>
+          <input type="number" min="1" max="100" step="1" id="r3-people" value="10"
+                 class="mt-2 w-full bg-paper dark:bg-graphite border border-mist dark:border-slate rounded-md px-3 py-2 text-sm text-ink dark:text-paper font-numeric"/>
+        </div>
+        <div>
+          <label for="r3-months" class="text-[11px] uppercase tracking-[0.15em] text-stone font-medium">Calendar months</label>
+          <input type="number" min="0.5" max="60" step="0.5" id="r3-months" value="5"
+                 class="mt-2 w-full bg-paper dark:bg-graphite border border-mist dark:border-slate rounded-md px-3 py-2 text-sm text-ink dark:text-paper font-numeric"/>
+        </div>
+      </div>
+
+      <div class="border-t border-mist dark:border-slate pt-5">
+        <div class="flex items-baseline justify-between gap-6">
+          <div>
+            <div class="text-[11px] uppercase tracking-[0.15em] text-stone font-medium">R3 leverage</div>
+            <div class="mt-2 font-display text-5xl text-ink dark:text-paper font-numeric" id="r3-leverage">—</div>
+            <div class="text-[11px] text-stone mt-2 italic" id="r3-formula">—</div>
+          </div>
+          <div class="text-right text-[11px] text-stone italic max-w-xs">
+            ℹ Self-reported. Ship1000x cannot estimate this for you —
+            only YOU know your project's true scope.
+            <br/>Persisted locally per project.
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- COST · OUTPUT · TRUST -->
+  <section class="space-y-4">
+    <div class="flex items-baseline justify-between">
+      <div class="text-[11px] uppercase tracking-[0.2em] text-stone font-medium">Cost · Output · Trust</div>
+      <span class="text-[10px] uppercase tracking-[0.2em] text-stone font-medium">mixed labels per metric</span>
+    </div>
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-px bg-mist dark:bg-slate border border-mist dark:border-slate rounded-lg overflow-hidden">
+
+      <div class="metric-card bg-paper dark:bg-graphite p-7">
+        <div class="text-[11px] uppercase tracking-[0.15em] text-stone font-medium">Real lines</div>
+        <div class="mt-3 font-display text-4xl text-ink dark:text-paper font-numeric" id="metric-lines">—</div>
+        <div class="text-[11px] text-stone mt-2 italic" id="metric-lines-pct">—</div>
+      </div>
+
+      <div class="metric-card bg-paper dark:bg-graphite p-7">
+        <div class="text-[11px] uppercase tracking-[0.15em] text-stone font-medium">API-equivalent cost</div>
+        <div class="mt-3 font-display text-4xl text-ink dark:text-paper font-numeric" id="metric-cost">—</div>
+        <div class="text-[11px] text-stone mt-2 italic" id="metric-cost-label">—</div>
+        <div class="text-[11px] text-stone mt-1 italic" id="metric-cost-billing-label">—</div>
+      </div>
+
+      <div class="metric-card bg-paper dark:bg-graphite p-7">
+        <div class="text-[11px] uppercase tracking-[0.15em] text-stone font-medium">Trust score</div>
+        <div class="mt-3 font-display text-4xl text-ink dark:text-paper font-numeric" id="metric-trust">—</div>
+        <div class="text-[11px] text-stone mt-2 italic" id="metric-trust-label">—</div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- Robustness checks (independent qualitative signals, NOT additive to Trust) -->
+  <section class="space-y-4">
+    <div class="flex items-baseline justify-between">
+      <h2 class="font-display text-2xl tracking-tight">Robustness checks</h2>
+      <span class="text-xs text-stone italic">independent setup signals — do not alter the score</span>
+    </div>
+    <div class="bg-paper dark:bg-graphite border border-mist dark:border-slate rounded-lg p-6">
+      <div id="robustness-list" class="space-y-3">
+        <div class="text-stone text-sm">Loading…</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Trend chart -->
+  <section class="space-y-4">
+    <div class="flex items-baseline justify-between">
+      <h2 class="font-display text-2xl tracking-tight">Daily activity</h2>
+      <span class="text-xs text-stone italic">unified active vs wall-clock, hours per day</span>
+    </div>
+    <div class="bg-paper dark:bg-graphite border border-mist dark:border-slate rounded-lg p-6">
+      <canvas id="trend-chart" height="80"></canvas>
+    </div>
+  </section>
+
+  <!-- Trust breakdown -->
+  <section class="space-y-4">
+    <div class="flex items-baseline justify-between">
+      <h2 class="font-display text-2xl tracking-tight">Trust by source</h2>
+      <span class="text-xs text-stone italic">weighted average of event-level confidence</span>
+    </div>
+    <div class="bg-paper dark:bg-graphite border border-mist dark:border-slate rounded-lg p-6">
+      <div id="trust-bars" class="space-y-4">
+        <div class="text-stone text-sm">Loading…</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Source quality scorecard -->
+  <section class="space-y-4">
+    <div class="flex items-baseline justify-between">
+      <h2 class="font-display text-2xl tracking-tight">Measurement quality</h2>
+      <span class="text-xs text-stone italic">truthfulness of token, cost, and active-time measurements</span>
+    </div>
+    <div class="bg-paper dark:bg-graphite border border-mist dark:border-slate rounded-lg p-6 space-y-5">
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-px bg-mist dark:bg-slate border border-mist dark:border-slate rounded-lg overflow-hidden">
+        <div class="bg-paper dark:bg-graphite p-5">
+          <div class="text-[11px] uppercase tracking-[0.15em] text-stone font-medium">Avg source quality</div>
+          <div class="mt-2 font-display text-3xl text-ink dark:text-paper font-numeric" id="source-quality-avg">—</div>
+        </div>
+        <div class="bg-paper dark:bg-graphite p-5">
+          <div class="text-[11px] uppercase tracking-[0.15em] text-stone font-medium">Low-quality sources</div>
+          <div class="mt-2 font-display text-3xl text-ink dark:text-paper font-numeric" id="source-quality-low">—</div>
+        </div>
+        <div class="bg-paper dark:bg-graphite p-5">
+          <div class="text-[11px] uppercase tracking-[0.15em] text-stone font-medium">Missing usage metadata</div>
+          <div class="mt-2 font-display text-3xl text-ink dark:text-paper font-numeric" id="source-quality-missing">—</div>
+        </div>
+      </div>
+      <div id="source-quality-bars" class="space-y-4">
+        <div class="text-stone text-sm">Loading…</div>
+      </div>
+    </div>
+  </section>
+
+  <p class="text-[11px] text-stone italic" id="footer-note">
+    Computed with cap_time = — min · P95 personal cadence · wall_brut capped 5× duration_sec per source
+  </p>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let trendChart = null;
+let r3CurrentActiveHours = 0;
+const WORKING_DAYS_PER_MONTH = 22;
+const WORKING_HOURS_PER_DAY = 8;
+
+async function fetchJSON(url) {
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.json();
+}
+
+const fmtCurrency = n => '$' + (n || 0).toLocaleString('en-US', {maximumFractionDigits: 0});
+const fmtInt = n => (n || 0).toLocaleString('en-US');
+
+async function loadHighlights(days) {
+  try {
+    const h = await fetchJSON(`/api/highlights?days=${days}`);
+    document.getElementById('metric-active').textContent = `${h.active_hours}h`;
+    document.getElementById('metric-wall').textContent = `${h.wall_hours}h`;
+    document.getElementById('metric-days').textContent = h.days_equivalent;
+    document.getElementById('metric-leverage').textContent = `×${h.leverage}`;
+    document.getElementById('metric-parallelism').textContent = h.parallelism;
+    document.getElementById('metric-lines').textContent = fmtInt(h.lines_real);
+    document.getElementById('metric-lines-pct').textContent = `${h.real_pct}% of raw · git-line factual`;
+    document.getElementById('metric-cost').textContent = fmtCurrency(h.cost_api_equivalent);
+    const costTruth = h.cost_truth || {};
+    const billed = costTruth.billed_estimated_usd || 0;
+    const absorbed = costTruth.subscription_absorbed_usd || 0;
+    const unknown = costTruth.unknown_billing_basis_usd || 0;
+    const unknownEvents = costTruth.events_with_unknown_billing_basis || 0;
+    const costPresentation = costTruth.presentation_label || 'API-equivalent cost · not invoice truth.';
+    document.getElementById('metric-cost-label').textContent =
+      h.cost_factual_pct >= 99.5 ? `API-equivalent · native token/pricing · ${costPresentation}` : `API-equivalent · ${h.cost_factual_pct}% native token/pricing coverage; remainder indicative/unknown · ${costPresentation}`;
+    document.getElementById('metric-cost-billing-label').textContent =
+      `billed-est. ${fmtCurrency(billed)} · subscription ${fmtCurrency(absorbed)} · unknown-basis ${fmtCurrency(unknown)} (${unknownEvents} events)`;
+    document.getElementById('metric-trust').textContent = `${h.trust_score}/100`;
+    document.getElementById('metric-trust-label').textContent =
+      `${h.trust_label} · weighted average per source (raw)`;
+    document.getElementById('window-label').textContent = `Last ${h.window_days} days`;
+    document.getElementById('footer-note').textContent =
+      `Computed with cap_time = ${h.threshold_min} min · P95 personal cadence · wall_brut capped 5× duration_sec per source`;
+    renderRobustness(h.trust_robustness || []);
+  } catch (e) {
+    console.error('Highlights error:', e);
+  }
+}
+
+function renderRobustness(checks) {
+  const container = document.getElementById('robustness-list');
+  if (!container) return;
+  if (!checks.length) {
+    container.innerHTML = '<div class="text-stone text-sm italic">No checks available.</div>';
+    return;
+  }
+  container.innerHTML = '';
+  checks.forEach(c => {
+    const iconColor = c.passed ? 'text-sage' : 'text-clay';
+    const icon = c.passed
+      ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>'
+      : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+    const row = document.createElement('div');
+    row.className = 'flex items-start gap-3 text-sm';
+    row.innerHTML = `
+      <span class="${iconColor} mt-0.5 flex-shrink-0">${icon}</span>
+      <div class="flex-1 min-w-0">
+        <div class="font-medium text-ink dark:text-paper">${c.name}</div>
+        <div class="text-xs text-stone italic mt-0.5">${c.detail}</div>
+      </div>
+    `;
+    container.appendChild(row);
+  });
+}
+
+async function loadProjectsForR3(days) {
+  try {
+    const data = await fetchJSON(`/api/projects?days=${days}`);
+    const select = document.getElementById('r3-project');
+    select.innerHTML = '';
+    if (!data.length) {
+      select.innerHTML = '<option value="">No projects in window</option>';
+      r3CurrentActiveHours = 0;
+      computeR3();
+      return;
+    }
+    // Top 10 by hours
+    data.slice(0, 10).forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p.project_id;
+      opt.dataset.hours = p.total_hours;
+      opt.dataset.commits = p.commits;
+      opt.dataset.cost = p.total_api_equivalent_cost;
+      opt.dataset.tool = p.dominant_tool;
+      const label = window.anonymizeProjectId(p.project_id);
+      opt.textContent = `${label}  ·  ${p.total_hours}h  ·  ${p.commits} commits`;
+      select.appendChild(opt);
+    });
+    const savedId = localStorage.getItem('ship1000x-r3-project');
+    if (savedId && Array.from(select.options).some(o => o.value === savedId)) {
+      select.value = savedId;
+    }
+    onR3ProjectChange();
+  } catch (e) {
+    console.error('Projects error:', e);
+  }
+}
+
+function loadR3Estimate(projectId) {
+  try {
+    const raw = localStorage.getItem(`ship1000x-r3-est:${projectId}`);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch (e) { return null; }
+}
+
+function saveR3Estimate(projectId, people, months) {
+  localStorage.setItem(`ship1000x-r3-est:${projectId}`,
+    JSON.stringify({people, months}));
+}
+
+function onR3ProjectChange() {
+  const select = document.getElementById('r3-project');
+  const opt = select.selectedOptions[0];
+  if (!opt || !opt.value) {
+    r3CurrentActiveHours = 0;
+    document.getElementById('r3-project-stats').textContent = '—';
+    computeR3();
+    return;
+  }
+  localStorage.setItem('ship1000x-r3-project', opt.value);
+  r3CurrentActiveHours = parseFloat(opt.dataset.hours) || 0;
+  const cost = parseFloat(opt.dataset.cost) || 0;
+  document.getElementById('r3-project-stats').textContent =
+    `${r3CurrentActiveHours}h active · ${opt.dataset.commits} commits · $${cost.toFixed(0)} · ${opt.dataset.tool}`;
+  // Restore saved estimate for this project (if any)
+  const saved = loadR3Estimate(opt.value);
+  if (saved) {
+    document.getElementById('r3-people').value = saved.people;
+    document.getElementById('r3-months').value = saved.months;
+  }
+  computeR3();
+}
+
+function computeR3() {
+  const people = parseFloat(document.getElementById('r3-people').value) || 0;
+  const months = parseFloat(document.getElementById('r3-months').value) || 0;
+  const out = document.getElementById('r3-leverage');
+  const formula = document.getElementById('r3-formula');
+  if (!people || !months || !r3CurrentActiveHours) {
+    out.textContent = '—';
+    formula.textContent = 'pick a project + fill people / months';
+    return;
+  }
+  const teamHours = people * months * WORKING_DAYS_PER_MONTH * WORKING_HOURS_PER_DAY;
+  const leverage = teamHours / r3CurrentActiveHours;
+  out.textContent = `×${leverage.toFixed(1)}`;
+  formula.textContent =
+    `${people} × ${months} mo × ${WORKING_DAYS_PER_MONTH}d × ${WORKING_HOURS_PER_DAY}h = ${teamHours.toFixed(0)}h vs your ${r3CurrentActiveHours}h`;
+  // Persist on each compute (debounced effectively by rapid input changes)
+  const select = document.getElementById('r3-project');
+  if (select.value) saveR3Estimate(select.value, people, months);
+}
+
+async function loadTrend(days) {
+  try {
+    const data = await fetchJSON(`/api/trend?days=${days}`);
+    const isDark = document.documentElement.classList.contains('dark');
+    const gridColor = isDark ? '#27272a' : '#e7e5e4';
+    const textColor = isDark ? '#a8a29e' : '#78716c';
+    const ctx = document.getElementById('trend-chart').getContext('2d');
+    if (trendChart) trendChart.destroy();
+    trendChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: data.map(d => d.date.slice(5)),  // MM-DD
+        datasets: [{
+          label: 'Active (unified)',
+          data: data.map(d => d.active_hours),
+          borderColor: '#c8a464',
+          backgroundColor: 'rgba(200, 164, 100, 0.06)',
+          tension: 0.35,
+          fill: true,
+          borderWidth: 2,
+          pointRadius: 0,
+          pointHoverRadius: 4,
+          pointHoverBackgroundColor: '#c8a464',
+        }, {
+          label: 'Wall clock',
+          data: data.map(d => d.wall_hours),
+          borderColor: isDark ? '#78716c' : '#a8a29e',
+          backgroundColor: 'transparent',
+          borderDash: [3, 4],
+          tension: 0.35,
+          borderWidth: 1,
+          pointRadius: 0,
+        }],
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: {
+            labels: { color: textColor, font: { size: 11, family: '-apple-system' }, usePointStyle: true, pointStyle: 'line' },
+            position: 'bottom',
+            align: 'end',
+          },
+          tooltip: {
+            backgroundColor: isDark ? '#0a0a0b' : '#fafaf9',
+            titleColor: isDark ? '#fafaf9' : '#0a0a0b',
+            bodyColor: isDark ? '#a8a29e' : '#78716c',
+            borderColor: isDark ? '#27272a' : '#e7e5e4',
+            borderWidth: 1,
+            padding: 10,
+            cornerRadius: 4,
+            titleFont: { size: 11 },
+            bodyFont: { size: 11 },
+          },
+        },
+        scales: {
+          x: { ticks: { color: textColor, font: { size: 10 } }, grid: { color: gridColor, display: false }, border: { display: false } },
+          y: { ticks: { color: textColor, font: { size: 10 } }, grid: { color: gridColor }, border: { display: false }, beginAtZero: true },
+        },
+      },
+    });
+  } catch (e) {
+    console.error('Trend error:', e);
+  }
+}
+
+async function loadTrust(days) {
+  try {
+    const data = await fetchJSON(`/api/trust?days=${days}`);
+    const container = document.getElementById('trust-bars');
+    container.innerHTML = '';
+    data.per_source.forEach(s => {
+      const colorClass = s.score >= 90 ? 'bg-sage'
+                        : s.score >= 70 ? 'bg-ambre-500'
+                        : s.score >= 40 ? 'bg-clay'
+                        : 'bg-stone';
+      const row = document.createElement('div');
+      row.innerHTML = `
+        <div class="flex justify-between items-baseline text-xs mb-1.5">
+          <span class="font-mono text-ink dark:text-paper">${s.source}</span>
+          <span class="text-stone"><span class="mr-4">${s.event_count} events</span><span class="font-numeric font-semibold text-ink dark:text-paper">${s.score}/100</span> · <span class="italic">${s.label}</span></span>
+        </div>
+        <div class="bg-mist dark:bg-slate rounded-full h-1 overflow-hidden">
+          <div class="${colorClass} h-1 rounded-full transition-all" style="width: ${s.score}%"></div>
+        </div>
+      `;
+      container.appendChild(row);
+    });
+  } catch (e) {
+    console.error('Trust error:', e);
+  }
+}
+
+async function loadSourceQuality(days) {
+  try {
+    const data = await fetchJSON(`/api/source-quality?days=${days}`);
+    const summary = data.summary || {};
+    const avg = summary.average_observed_quality_score;
+    document.getElementById('source-quality-avg').textContent =
+      avg == null ? '—' : `${avg.toFixed(0)}/100`;
+    document.getElementById('source-quality-low').textContent = summary.low_quality_sources ?? 0;
+    document.getElementById('source-quality-missing').textContent = summary.sources_missing_usage_metadata ?? 0;
+
+    const container = document.getElementById('source-quality-bars');
+    const rows = (data.rows || [])
+      .filter(row => row.events > 0 && row.quality_scores && row.quality_scores.overall != null)
+      .sort((a, b) => (a.quality_scores.overall || 0) - (b.quality_scores.overall || 0));
+    container.innerHTML = '';
+    if (!rows.length) {
+      container.innerHTML = '<div class="text-stone text-sm italic">No measured sources in this window.</div>';
+      return;
+    }
+    rows.forEach(row => {
+      const score = row.quality_scores.overall || 0;
+      const colorClass = score >= 90 ? 'bg-sage'
+                        : score >= 70 ? 'bg-ambre-500'
+                        : score >= 40 ? 'bg-clay'
+                        : 'bg-stone';
+      const el = document.createElement('div');
+      el.innerHTML = `
+        <div class="flex justify-between items-baseline text-xs mb-1.5 gap-4">
+          <span class="font-mono text-ink dark:text-paper">${row.source}</span>
+          <span class="text-stone text-right">
+            <span class="mr-4">${row.events} events</span>
+            <span class="font-numeric font-semibold text-ink dark:text-paper">${score.toFixed(0)}/100</span>
+            · <span class="italic">${row.quality_band}</span>
+            · <span class="italic">${row.risk}</span>
+          </span>
+        </div>
+        <div class="bg-mist dark:bg-slate rounded-full h-1 overflow-hidden">
+          <div class="${colorClass} h-1 rounded-full transition-all" style="width: ${score}%"></div>
+        </div>
+      `;
+      container.appendChild(el);
+    });
+  } catch (e) {
+    console.error('Source quality error:', e);
+  }
+}
+
+async function reloadData() {
+  const days = window.getWindowDays();
+  await Promise.all([
+    loadHighlights(days),
+    loadTrend(days),
+    loadTrust(days),
+    loadSourceQuality(days),
+    loadProjectsForR3(days),
+  ]);
+}
+
+// Wire R3 inputs
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('r3-project').addEventListener('change', onR3ProjectChange);
+  document.getElementById('r3-people').addEventListener('input', computeR3);
+  document.getElementById('r3-months').addEventListener('input', computeR3);
+});
+
+reloadData();
+</script>
+{% endblock %}

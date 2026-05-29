@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Ship1000x{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            // Premium neutral palette : ink + paper + subtle ambre accent
+            ink:      '#0a0a0b',   // near-black, body text on light
+            graphite: '#18181b',   // deep gray, surfaces on dark
+            slate:    '#27272a',   // borders/dividers on dark
+            mist:     '#e7e5e4',   // gray pearl, borders on light
+            paper:    '#fafaf9',   // off-white, body bg on light
+            chalk:    '#f5f5f4',   // softer off-white, surfaces
+            // Single accent : aged gold (subtle, distinctive)
+            ambre:    {
+              50:  '#fbf6ec',
+              100: '#f5ead0',
+              200: '#ead09f',
+              500: '#c8a464',     // headline accent
+              600: '#a8854a',
+              700: '#8b6c39',
+            },
+            // Functional colors (sober, no neon)
+            sage:     '#6b7d6a',   // success / Factual
+            clay:     '#a85e3e',   // alert / Indicative
+            stone:    '#78716c',   // neutral data
+          },
+          fontFamily: {
+            'sans':  ['"Inter"', '-apple-system', 'BlinkMacSystemFont', '"SF Pro Text"', 'system-ui', 'sans-serif'],
+            'display': ['"Inter"', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
+            'mono':  ['"JetBrains Mono"', '"SF Mono"', 'Menlo', 'monospace'],
+          },
+        }
+      }
+    }
+    // Auto dark mode based on system preference
+    if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+      document.documentElement.classList.add('dark');
+    }
+  </script>
+  <style>
+    html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+    body { font-family: "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif; font-feature-settings: "cv11", "ss01"; }
+    h1, h2, h3, .font-display { font-family: "Inter", -apple-system, BlinkMacSystemFont, sans-serif; letter-spacing: -0.02em; font-weight: 600; }
+    .font-numeric { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
+    .font-mono { font-family: "JetBrains Mono", "SF Mono", Menlo, monospace; }
+    .metric-card { transition: border-color 0.2s ease, transform 0.15s ease; }
+    .metric-card:hover { border-color: #c8a464; transform: translateY(-1px); }
+    /* Subtle separator line below nav */
+    nav { backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
+    /* Refined select for window picker */
+    select { appearance: none; background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='currentColor'%3e%3cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M19 9l-7 7-7-7'/%3e%3c/svg%3e"); background-repeat: no-repeat; background-position: right 0.5rem center; background-size: 1em; padding-right: 2rem; }
+  </style>
+</head>
+<body class="bg-paper dark:bg-ink text-ink dark:text-paper min-h-screen">
+
+  <nav class="bg-paper/80 dark:bg-ink/80 border-b border-mist dark:border-slate sticky top-0 z-10">
+    <div class="max-w-7xl mx-auto px-6 lg:px-10">
+      <div class="flex items-center justify-between h-16">
+        <div class="flex items-center gap-10">
+          <a href="/" class="flex items-baseline gap-2.5">
+            <span class="font-display text-xl tracking-tight text-ink dark:text-paper">Ship1000x</span>
+            <span class="text-[10px] uppercase tracking-[0.2em] text-stone font-medium">dashboard</span>
+          </a>
+          <div class="hidden sm:flex items-center gap-8 text-sm">
+            <a href="/" class="text-stone hover:text-ink dark:hover:text-paper transition">Overview</a>
+            <a href="/projects" class="text-stone hover:text-ink dark:hover:text-paper transition">Projects</a>
+          </div>
+        </div>
+        <div class="flex items-center gap-5 text-sm">
+          <span id="demo-badge" class="hidden text-[10px] uppercase tracking-[0.2em] text-ambre-600 font-semibold border border-ambre-500 rounded px-2 py-0.5">demo</span>
+          <select id="window-select" class="bg-transparent border border-mist dark:border-slate rounded-md px-3 py-1.5 text-xs font-medium text-stone hover:text-ink dark:hover:text-paper hover:border-stone transition cursor-pointer">
+            <option value="7">7 days</option>
+            <option value="14">14 days</option>
+            <option value="30" selected>30 days</option>
+            <option value="60">60 days</option>
+            <option value="90">90 days</option>
+            <option value="180">180 days</option>
+            <option value="365">1 year</option>
+          </select>
+          <button id="demo-toggle" onclick="toggleDemo()" class="text-stone hover:text-ambre-500 transition" title="Toggle demo mode (anonymize project names)">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+          <button onclick="document.documentElement.classList.toggle('dark')" class="text-stone hover:text-ambre-500 transition" title="Toggle theme">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <main class="max-w-7xl mx-auto px-6 lg:px-10 py-12">
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="text-center py-12 mt-20 border-t border-mist dark:border-slate">
+    <div class="text-xs text-stone tracking-wide">
+      <span class="font-medium italic">Ship1000x</span> · local-first AI dev productivity tracker · 100% your data
+    </div>
+    <div class="mt-3 text-[11px] text-stone">
+      <a href="https://github.com/Mr1000xGrowth/ship1000x" class="hover:text-ambre-500 transition">github.com/Mr1000xGrowth/ship1000x</a>
+    </div>
+    <div class="mt-4 text-[11px] text-stone">
+      Built with <span class="text-ambre-500">♥</span> by
+      <a href="https://github.com/Mr1000xGrowth" class="font-medium italic hover:text-ambre-500 transition">Mr1000xGrowth</a>
+    </div>
+  </footer>
+
+  <script>
+    // Sync window selector across pages via localStorage
+    const winSel = document.getElementById('window-select');
+    const savedWindow = localStorage.getItem('ship1000x-window') || '30';
+    winSel.value = savedWindow;
+    winSel.addEventListener('change', () => {
+      localStorage.setItem('ship1000x-window', winSel.value);
+      if (typeof reloadData === 'function') reloadData();
+    });
+    window.getWindowDays = () => parseInt(winSel.value, 10);
+
+    // ─── Demo mode : anonymize project IDs ────────────────────────────
+    // Persistent mapping real_id → "project-A/B/C…" so the same project
+    // shows the same alias across reloads and across pages.
+    window._demoMap = JSON.parse(localStorage.getItem('ship1000x-demo-map') || '{}');
+
+    window.anonymizeProjectId = function(realId) {
+      if (!document.body.classList.contains('demo')) return realId;
+      if (!realId || realId === 'unclassified') return realId;
+      if (!(realId in window._demoMap)) {
+        const idx = Object.keys(window._demoMap).length;
+        const first = idx >= 26 ? String.fromCharCode(65 + Math.floor(idx / 26) - 1) : '';
+        const second = String.fromCharCode(65 + (idx % 26));
+        window._demoMap[realId] = `project-${first}${second}`;
+        localStorage.setItem('ship1000x-demo-map', JSON.stringify(window._demoMap));
+      }
+      return window._demoMap[realId];
+    };
+
+    window.toggleDemo = function() {
+      const on = !document.body.classList.contains('demo');
+      document.body.classList.toggle('demo', on);
+      document.getElementById('demo-badge').classList.toggle('hidden', !on);
+      document.getElementById('demo-toggle').classList.toggle('text-ambre-500', on);
+      localStorage.setItem('ship1000x-demo-mode', on ? '1' : '0');
+      if (typeof reloadData === 'function') reloadData();
+    };
+
+    // Restore demo mode from previous visit
+    if (localStorage.getItem('ship1000x-demo-mode') === '1') {
+      document.body.classList.add('demo');
+      document.getElementById('demo-badge').classList.remove('hidden');
+      document.getElementById('demo-toggle').classList.add('text-ambre-500');
+    }
+  </script>
+
+  {% block scripts %}{% endblock %}
+</body>
+</html>

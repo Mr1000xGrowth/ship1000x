@@ -1,0 +1,71 @@
+# Patterns pour classifier les lignes de code en 4 categories :
+#   real      = code ecrit (humain + IA) sur sources
+#   seed      = premier commit / import massif / scaffold
+#   vendored  = code tiers commite
+#   generated = fichiers auto-generes (lockfiles, bundles, ...)
+#
+# Override local possible via config/line_classification.local.yaml
+# (gitignore, meme structure, merge par concatenation).
+#
+# Reference : github.com/github/linguist (linguist-generated / linguist-vendored
+# via .gitattributes sont aussi respectes).
+
+generated_patterns:
+  # Lockfiles
+  - "**/package-lock.json"
+  - "**/yarn.lock"
+  - "**/pnpm-lock.yaml"
+  - "**/poetry.lock"
+  - "**/Pipfile.lock"
+  - "**/Cargo.lock"
+  - "**/go.sum"
+  - "**/Gemfile.lock"
+  - "**/composer.lock"
+  - "**/mix.lock"
+  - "**/Podfile.lock"
+  # Bundles / builds / dist
+  - "**/*.min.js"
+  - "**/*.min.css"
+  - "**/*.bundle.js"
+  - "**/*.map"
+  - "**/dist/**"
+  - "**/build/**"
+  - "**/out/**"
+  - "**/.next/**"
+  - "**/target/**"
+  - "**/public/build/**"
+  # Coverage / test output
+  - "**/coverage/**"
+  - "**/.coverage"
+  - "**/htmlcov/**"
+  - "**/.pytest_cache/**"
+  # ORMs / migrations auto
+  - "**/prisma/migrations/**/migration.sql"
+  - "**/db/schema.rb"  # Rails
+  # Cache / OS junk
+  - "**/__pycache__/**"
+  - "**/*.pyc"
+  - "**/.DS_Store"
+  - "**/Thumbs.db"
+  # Snapshots de tests
+  - "**/__snapshots__/**/*.snap"
+  # Types auto
+  - "**/*.d.ts.map"
+
+vendored_patterns:
+  - "**/node_modules/**"
+  - "**/vendor/**"
+  - "**/third_party/**"
+  - "**/bower_components/**"
+  - "**/.venv/**"
+  - "**/venv/**"
+  - "**/env/**"
+  - "**/.bundle/**"
+
+seed:
+  # Seuils pour qu'un commit (hors 1er commit du repo) soit considere seed
+  lines_threshold: 5000
+  files_threshold: 50
+  message_regex: "^\\s*(init|initial|scaffold|import|bootstrap|seed|first commit|template|fork)"
+  # Premier commit d'un repo (git rev-list --max-parents=0) est TOUJOURS seed
+  always_first_commit: true

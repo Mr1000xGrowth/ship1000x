@@ -1,0 +1,22 @@
+{
+  "schema_version": "ship1000x.roo_kilo_code.task.v1",
+  "task_id": "roo-kilo-redacted-001",
+  "started_at": "2026-05-23T11:00:00Z",
+  "ended_at": "2026-05-23T11:11:00Z",
+  "active_sec": 360,
+  "wall_clock_sec": 660,
+  "variant": "roo-code",
+  "provider": "anthropic",
+  "model": "claude-sonnet-4-7",
+  "mode": "act",
+  "files_in_context_count": 3,
+  "api_turn_count": 6,
+  "usage": {
+    "input_tokens": 900,
+    "output_tokens": 240,
+    "cached_input_tokens": 120,
+    "cache_write_tokens": 0,
+    "reasoning_tokens": 0
+  },
+  "redaction_note": "Synthetic metadata-only fixture. No prompt, response, path, diff, or raw payload."
+}

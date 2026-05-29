@@ -1,0 +1,19 @@
+{
+  "schema_version": "ship1000x.gemini_cli.session.v1",
+  "session_id": "gemini-redacted-001",
+  "started_at": "2026-05-23T08:00:00Z",
+  "ended_at": "2026-05-23T08:12:00Z",
+  "active_sec": 420,
+  "wall_clock_sec": 720,
+  "model": "gemini-2.5-pro",
+  "tool_calls": 3,
+  "user_messages": 4,
+  "usage": {
+    "input_tokens": 1200,
+    "output_tokens": 420,
+    "cached_input_tokens": 0,
+    "cache_write_tokens": 0,
+    "reasoning_tokens": 80
+  },
+  "redaction_note": "Synthetic metadata-only fixture. No prompt, response, path, diff, or raw payload."
+}

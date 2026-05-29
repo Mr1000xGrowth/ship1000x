@@ -1,0 +1,100 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ship1000x"
+version = "1.1.0"
+description = "Track what you actually ship with AI. Local-first tracker for AI-assisted development (Claude Code, Codex, Cursor, git)."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+authors = [
+    { name = "Mr1000xGrowth" }
+]
+keywords = [
+    "ai",
+    "productivity",
+    "tracker",
+    "claude-code",
+    "codex",
+    "cursor",
+    "developer-tools",
+    "time-tracking",
+    "llm-cost",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development",
+    "Topic :: Utilities",
+]
+dependencies = [
+    "click>=8.1",
+    "rich>=13.7",
+    "pyyaml>=6.0",
+    "boto3>=1.34",
+    "flask>=3.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "build>=1.2",
+    "pytest>=8.0",
+    "ruff>=0.5",
+]
+# `ship1000x watch` foreground daemon (Wave 3 / Day 3-5). Optional —
+# the rest of SHIP1000X runs without psutil. Install with
+# `pip install ship1000x[watch]` to enable the runtime daemon.
+watch = [
+    "psutil>=5.9",
+]
+
+[project.urls]
+Homepage = "https://github.com/Mr1000xGrowth/ship1000x"
+Repository = "https://github.com/Mr1000xGrowth/ship1000x"
+Issues = "https://github.com/Mr1000xGrowth/ship1000x/issues"
+
+[project.scripts]
+ship1000x = "ship1000x.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["ship1000x*"]
+
+[tool.setuptools.package-data]
+ship1000x = [
+    "data/*.json",
+    "data/*.md",
+    "web/templates/*.html",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "SIM"]
+ignore = [
+    "E501",   # line too long (we use black-style formatting, not hard-wrap)
+    "E402",   # module-level import not at top (we do lazy imports to keep CLI startup fast)
+    "N806",   # variable in function should be lowercase (we keep some PascalCase for clarity)
+    "B007",   # loop control variable not used (sometimes intentional for count-only iterations)
+    "SIM102", # nested if (readable for complex conditions)
+    "SIM108", # ternary vs if/else (ternary not always more readable)
+    "SIM110", # `any()` for-loop (explicit loop sometimes clearer)
+    "SIM115", # context manager for file (sometimes we handle errors differently)
+    "SIM118", # `in dict.keys()` vs `in dict` (explicit is fine)
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]

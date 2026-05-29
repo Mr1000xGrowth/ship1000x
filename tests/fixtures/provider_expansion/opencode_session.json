@@ -1,0 +1,14 @@
+{
+  "schema_version": "ship1000x.opencode.session.v1",
+  "session_id": "opencode-redacted-001",
+  "started_at": "2026-05-23T09:00:00Z",
+  "ended_at": "2026-05-23T09:08:00Z",
+  "active_sec": 300,
+  "wall_clock_sec": 480,
+  "provider": "openai-compatible",
+  "model": "unknown",
+  "tool_calls": 2,
+  "user_messages": 3,
+  "usage": {},
+  "redaction_note": "Synthetic metadata-only fixture. No prompt, response, path, diff, or raw payload."
+}
