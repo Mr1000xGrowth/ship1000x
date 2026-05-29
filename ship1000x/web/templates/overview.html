@@ -80,6 +80,45 @@
     </p>
   </section>
 
+  <!-- COST BY MODEL -->
+  <section class="space-y-4">
+    <div class="flex items-baseline justify-between">
+      <div>
+        <div class="text-[11px] uppercase tracking-[0.2em] text-stone font-medium">Cost & tokens by model</div>
+        <div class="text-xs text-stone mt-1">API-equivalent cost per model — what-if at API rates, not an invoice</div>
+      </div>
+      <span class="text-[10px] uppercase tracking-[0.2em] text-sage font-medium">Factual tokens · Modeled cost</span>
+    </div>
+    <div class="bg-paper dark:bg-graphite border border-mist dark:border-slate rounded-lg p-7 space-y-5">
+      <div class="flex items-baseline gap-8 flex-wrap">
+        <div>
+          <div class="text-[11px] uppercase tracking-[0.15em] text-stone font-medium">Absorbed by subscription</div>
+          <div class="mt-2 font-display text-5xl text-ink dark:text-paper font-numeric" id="cm-absorbed">—</div>
+          <div class="text-[11px] text-stone mt-1 italic">API-equivalent value you did NOT pay per-token</div>
+        </div>
+        <div>
+          <div class="text-[11px] uppercase tracking-[0.15em] text-stone font-medium">API-equivalent total</div>
+          <div class="mt-2 font-display text-3xl text-stone font-numeric" id="cm-apieq">—</div>
+        </div>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="text-[11px] uppercase tracking-[0.1em] text-stone border-b border-mist dark:border-slate">
+              <th class="text-left py-2 font-medium">Model</th>
+              <th class="text-right py-2 font-medium">Cache read</th>
+              <th class="text-right py-2 font-medium">Output</th>
+              <th class="text-right py-2 font-medium">API-equiv $</th>
+              <th class="text-left py-2 pl-3 font-medium">Pricing</th>
+            </tr>
+          </thead>
+          <tbody id="cm-rows" class="font-numeric"></tbody>
+        </table>
+      </div>
+      <p class="text-xs text-stone italic" id="cm-pricing-note">—</p>
+    </div>
+  </section>
+
   <!-- R1 — TIME LEVERAGE -->
   <section class="space-y-4">
     <div class="flex items-baseline justify-between">
@@ -594,6 +633,36 @@ async function loadSourceQuality(days) {
   }
 }
 
+async function loadCostModels(days) {
+  try {
+    const d = await fetchJSON(`/api/cost-models?days=${days}`);
+    const fmtBig = (n) => (n >= 1e9 ? (n/1e9).toFixed(2)+' Md' : n >= 1e6 ? (n/1e6).toFixed(1)+' M' : n >= 1e3 ? (n/1e3).toFixed(0)+' k' : String(n|0));
+    document.getElementById('cm-absorbed').textContent = fmtCurrency(d.totals.subscription_absorbed);
+    document.getElementById('cm-apieq').textContent = fmtCurrency(d.totals.api_equivalent);
+    const tbody = document.getElementById('cm-rows');
+    tbody.innerHTML = '';
+    d.by_model.forEach(m => {
+      const tr = document.createElement('tr');
+      tr.className = 'border-b border-mist/40 dark:border-slate/40';
+      const badge = m.pricing_quality === 'exact'
+        ? '<span class="text-sage">✓ exact</span>'
+        : '<span class="text-clay">⚠ fallback</span>';
+      tr.innerHTML =
+        `<td class="py-2 text-ink dark:text-paper">${m.provider} / ${m.model}</td>` +
+        `<td class="py-2 text-right text-stone">${fmtBig(m.tokens.cache_read)}</td>` +
+        `<td class="py-2 text-right text-stone">${fmtBig(m.tokens.output_tokens)}</td>` +
+        `<td class="py-2 text-right text-ink dark:text-paper">${fmtCurrency(m.cost_api_equivalent)}</td>` +
+        `<td class="py-2 pl-3 text-[11px]">${badge}</td>`;
+      tbody.appendChild(tr);
+    });
+    const fb = d.pricing.fallback_models;
+    document.getElementById('cm-pricing-note').textContent =
+      `Pricing snapshot ${d.pricing.version}` +
+      (fb.length ? ` · ${fb.length} model(s) without exact rate: ${fb.join(', ')}` : ' · all models priced') +
+      ` · ${d.pricing.note}`;
+  } catch (e) { /* table reste vide */ }
+}
+
 async function reloadData() {
   const days = window.getWindowDays();
   await Promise.all([
@@ -602,6 +671,7 @@ async function reloadData() {
     loadTrust(days),
     loadSourceQuality(days),
     loadProjectsForR3(days),
+    loadCostModels(days),
   ]);
 }
 

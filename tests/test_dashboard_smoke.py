@@ -192,6 +192,20 @@ class TestDashboardSmoke(unittest.TestCase):
         )
         self.assertIn("not invoice truth", data["cost_truth"]["presentation_label"])
 
+    def test_api_cost_models_returns_valid_json(self):
+        client = self._make_client()
+        r = client.get("/api/cost-models?days=30")
+        self.assertEqual(r.status_code, 200)
+        data = r.get_json()
+        self.assertEqual(data["schema_version"], "ship1000x.dashboard.cost_models.v1")
+        for key in ("totals", "by_model", "pricing", "window_days"):
+            self.assertIn(key, data)
+        for key in ("api_equivalent", "billed", "subscription_absorbed"):
+            self.assertIn(key, data["totals"])
+        self.assertIsInstance(data["by_model"], list)
+        self.assertIn("version", data["pricing"])
+        self.assertIn("fallback_models", data["pricing"])
+
     def test_api_highlights_keeps_legacy_unknown_cost_out_of_billed_estimate(self):
         s = Storage(self.db_path)
         ts = datetime.now(timezone.utc).isoformat()

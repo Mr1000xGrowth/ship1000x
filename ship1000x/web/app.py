@@ -279,6 +279,78 @@ def create_app(db_path: Path, config_dir: Path) -> Flask:
             for r in rows
         ])
 
+    @app.route("/api/cost-models")
+    def api_cost_models():
+        """Coût + tokens par modèle (table daily_model_usage).
+
+        api_equivalent = ce que ça coûterait au tarif API (et-si).
+        billed = estimé facturé (0 sous abonnement). subscription_absorbed =
+        api_equivalent - billed = valeur absorbée par les abonnements.
+        """
+        days = int(request.args.get("days", 30))
+        tok_fields = (
+            "fresh_input", "cache_read", "cache_write_5m", "cache_write_1h",
+            "output_tokens", "thinking", "reasoning", "web_search_requests",
+        )
+        with storage.conn() as conn:
+            rows = conn.execute(
+                "SELECT * FROM daily_model_usage "
+                "WHERE date >= date('now', ? || ' days') ORDER BY date",
+                (f"-{days}",),
+            ).fetchall()
+            pricing_version = conn.execute(
+                "SELECT MAX(pricing_version) v FROM daily_model_usage"
+            ).fetchone()["v"]
+
+        by_model: dict[tuple, dict] = {}
+        total_api = total_billed = 0.0
+        for r in rows:
+            key = (r["provider"], r["model"])
+            m = by_model.get(key)
+            if m is None:
+                m = {
+                    "provider": r["provider"], "model": r["model"],
+                    "tokens": {f: 0 for f in tok_fields},
+                    "cost_api_equivalent": 0.0, "cost_billed": 0.0,
+                    "pricing_quality": r["pricing_quality"],
+                    "auth_mode": r["auth_mode"], "daily": [],
+                }
+                by_model[key] = m
+            for f in tok_fields:
+                m["tokens"][f] += r[f] or 0
+            m["cost_api_equivalent"] += r["cost_api_equivalent"] or 0.0
+            m["cost_billed"] += r["cost_billed"] or 0.0
+            m["daily"].append({
+                "date": r["date"],
+                "cost": round(r["cost_api_equivalent"] or 0.0, 4),
+            })
+            total_api += r["cost_api_equivalent"] or 0.0
+            total_billed += r["cost_billed"] or 0.0
+
+        models = sorted(by_model.values(), key=lambda x: -x["cost_api_equivalent"])
+        for m in models:
+            m["cost_api_equivalent"] = round(m["cost_api_equivalent"], 2)
+            m["cost_billed"] = round(m["cost_billed"], 2)
+        fallback_models = [
+            f"{m['provider']}/{m['model']}" for m in models
+            if m["pricing_quality"] == "fallback"
+        ]
+        return jsonify({
+            "schema_version": "ship1000x.dashboard.cost_models.v1",
+            "window_days": days,
+            "totals": {
+                "api_equivalent": round(total_api, 2),
+                "billed": round(total_billed, 2),
+                "subscription_absorbed": round(total_api - total_billed, 2),
+            },
+            "by_model": models,
+            "pricing": {
+                "version": pricing_version,
+                "fallback_models": fallback_models,
+                "note": "API-equivalent = what-if at API rates, not an invoice.",
+            },
+        })
+
     @app.route("/api/projects")
     def api_projects():
         days = int(request.args.get("days", 30))
