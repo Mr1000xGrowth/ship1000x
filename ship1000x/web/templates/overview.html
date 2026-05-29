@@ -14,8 +14,9 @@
   <section class="border-l-2 border-ambre-500 pl-5 py-2">
     <div class="text-[11px] uppercase tracking-[0.2em] text-stone font-medium mb-1">What this measures</div>
     <p class="text-sm text-ink dark:text-paper">
-      Ship1000x reports <span class="font-medium">three distinct ratios</span> of AI leverage —
-      most dashboards mix them silently. Here they're separated, with their confidence label.
+      Overview shows only what Ship1000x can <span class="font-medium">measure</span> — engagement,
+      tokens, cost, leverage — each with its confidence label. What-if and self-reported ratios
+      live in the <a href="/estimate" class="underline hover:text-ambre-500 transition">Estimate</a> tab.
     </p>
   </section>
 
@@ -45,6 +46,22 @@
         <div class="text-[11px] text-stone mt-2 italic">your real time / 8h</div>
       </div>
 
+    </div>
+    <!-- Thin factual context strip : how many days, how many tracked sources -->
+    <div class="flex flex-wrap items-center gap-x-6 gap-y-1 text-xs text-stone pl-1">
+      <span><span class="font-numeric font-semibold text-ink dark:text-paper" id="engage-active-days">—</span> active days in window</span>
+      <span class="text-mist dark:text-slate">·</span>
+      <span><span class="font-numeric font-semibold text-ink dark:text-paper" id="engage-sources">—</span> tracked sources</span>
+      <span class="text-mist dark:text-slate">·</span>
+      <span><span class="font-numeric font-semibold text-ink dark:text-paper" id="engage-wall">—</span> wall-clock hours (app open)</span>
+    </div>
+    <!-- Daily activity : the engagement story over time -->
+    <div class="bg-paper dark:bg-graphite border border-mist dark:border-slate rounded-lg p-6">
+      <div class="flex items-baseline justify-between mb-4">
+        <div class="text-[11px] uppercase tracking-[0.15em] text-stone font-medium">Daily activity</div>
+        <span class="text-xs text-stone italic">your real human time vs cumulative work (∥), hours per day</span>
+      </div>
+      <canvas id="trend-chart" height="80"></canvas>
     </div>
   </section>
 
@@ -109,6 +126,7 @@
               <th class="text-right py-2 font-medium">Cache read</th>
               <th class="text-right py-2 font-medium">Output</th>
               <th class="text-right py-2 font-medium">API-equiv $</th>
+              <th class="text-right py-2 pl-3 font-medium hidden sm:table-cell">Trend (period)</th>
               <th class="text-left py-2 pl-3 font-medium">Pricing</th>
             </tr>
           </thead>
@@ -142,80 +160,11 @@
     </p>
   </section>
 
-  <!-- R2 — AGENT EFFICIENCY -->
+  <!-- OUTPUT & COST -->
   <section class="space-y-4">
     <div class="flex items-baseline justify-between">
-      <div>
-        <div class="text-[11px] uppercase tracking-[0.2em] text-stone font-medium">R2 · Agent efficiency</div>
-        <div class="text-xs text-stone mt-1">How fast an IA agent is vs a human on the same task</div>
-      </div>
-      <span class="text-[10px] uppercase tracking-[0.2em] text-clay font-medium">Indicative · per-task</span>
-    </div>
-    <div class="bg-paper dark:bg-graphite border border-mist dark:border-slate rounded-lg p-7">
-      <div class="font-display text-3xl text-ink dark:text-paper font-numeric">10× — 50×</div>
-      <div class="text-xs text-stone mt-3 leading-relaxed">
-        <span class="font-medium">refactor ~30×</span> · <span class="font-medium">boilerplate ~50×</span> · <span class="font-medium">debug ~5×</span>
-        <br/>
-        <span class="italic">Not measured directly by Ship1000x — task-dependent.
-        See <a href="https://github.com/Mr1000xGrowth/ship1000x/blob/main/docs/METHODOLOGY.md" class="hover:text-ambre-500 transition underline">METHODOLOGY.md</a>.</span>
-      </div>
-    </div>
-  </section>
-
-  <!-- R3 — PROJECT OUTPUT -->
-  <section class="space-y-4">
-    <div class="flex items-baseline justify-between">
-      <div>
-        <div class="text-[11px] uppercase tracking-[0.2em] text-stone font-medium">R3 · Project output vs human team</div>
-        <div class="text-xs text-stone mt-1">What you produced vs an equivalent human team's effort</div>
-      </div>
-      <span class="text-[10px] uppercase tracking-[0.2em] text-clay font-medium">Estimative · your input</span>
-    </div>
-
-    <div class="bg-paper dark:bg-graphite border border-mist dark:border-slate rounded-lg p-7 space-y-5">
-      <div>
-        <label for="r3-project" class="text-[11px] uppercase tracking-[0.15em] text-stone font-medium">Project</label>
-        <select id="r3-project" class="mt-2 w-full bg-paper dark:bg-graphite border border-mist dark:border-slate rounded-md px-3 py-2 text-sm text-ink dark:text-paper">
-          <option value="">Loading…</option>
-        </select>
-        <div id="r3-project-stats" class="mt-2 text-xs text-stone font-mono">—</div>
-      </div>
-
-      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div>
-          <label for="r3-people" class="text-[11px] uppercase tracking-[0.15em] text-stone font-medium">Equivalent team — people</label>
-          <input type="number" min="1" max="100" step="1" id="r3-people" value="10"
-                 class="mt-2 w-full bg-paper dark:bg-graphite border border-mist dark:border-slate rounded-md px-3 py-2 text-sm text-ink dark:text-paper font-numeric"/>
-        </div>
-        <div>
-          <label for="r3-months" class="text-[11px] uppercase tracking-[0.15em] text-stone font-medium">Calendar months</label>
-          <input type="number" min="0.5" max="60" step="0.5" id="r3-months" value="5"
-                 class="mt-2 w-full bg-paper dark:bg-graphite border border-mist dark:border-slate rounded-md px-3 py-2 text-sm text-ink dark:text-paper font-numeric"/>
-        </div>
-      </div>
-
-      <div class="border-t border-mist dark:border-slate pt-5">
-        <div class="flex items-baseline justify-between gap-6">
-          <div>
-            <div class="text-[11px] uppercase tracking-[0.15em] text-stone font-medium">R3 leverage</div>
-            <div class="mt-2 font-display text-5xl text-ink dark:text-paper font-numeric" id="r3-leverage">—</div>
-            <div class="text-[11px] text-stone mt-2 italic" id="r3-formula">—</div>
-          </div>
-          <div class="text-right text-[11px] text-stone italic max-w-xs">
-            ℹ Self-reported. Ship1000x cannot estimate this for you —
-            only YOU know your project's true scope.
-            <br/>Persisted locally per project.
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- COST · OUTPUT · TRUST -->
-  <section class="space-y-4">
-    <div class="flex items-baseline justify-between">
-      <div class="text-[11px] uppercase tracking-[0.2em] text-stone font-medium">Cost · Output · Trust</div>
-      <span class="text-[10px] uppercase tracking-[0.2em] text-stone font-medium">mixed labels per metric</span>
+      <div class="text-[11px] uppercase tracking-[0.2em] text-stone font-medium">Output & cost</div>
+      <span class="text-[10px] uppercase tracking-[0.2em] text-stone font-medium">Factual lines · Modeled cost</span>
     </div>
     <div class="grid grid-cols-1 sm:grid-cols-3 gap-px bg-mist dark:bg-slate border border-mist dark:border-slate rounded-lg overflow-hidden">
 
@@ -233,59 +182,33 @@
       </div>
 
       <div class="metric-card bg-paper dark:bg-graphite p-7">
-        <div class="text-[11px] uppercase tracking-[0.15em] text-stone font-medium">Trust score</div>
-        <div class="mt-3 font-display text-4xl text-ink dark:text-paper font-numeric" id="metric-trust">—</div>
-        <div class="text-[11px] text-stone mt-2 italic" id="metric-trust-label">—</div>
+        <div class="text-[11px] uppercase tracking-[0.15em] text-stone font-medium">Cost per real line</div>
+        <div class="mt-3 font-display text-4xl text-ink dark:text-paper font-numeric" id="metric-cost-per-line">—</div>
+        <div class="text-[11px] text-stone mt-2 italic">API-equivalent $ ÷ factual git lines</div>
       </div>
 
     </div>
   </section>
 
-  <!-- Robustness checks (independent qualitative signals, NOT additive to Trust) -->
+  <!-- CONFIDENCE & DATA QUALITY (consolidated) -->
   <section class="space-y-4">
     <div class="flex items-baseline justify-between">
-      <h2 class="font-display text-2xl tracking-tight">Robustness checks</h2>
-      <span class="text-xs text-stone italic">independent setup signals — do not alter the score</span>
-    </div>
-    <div class="bg-paper dark:bg-graphite border border-mist dark:border-slate rounded-lg p-6">
-      <div id="robustness-list" class="space-y-3">
-        <div class="text-stone text-sm">Loading…</div>
+      <div>
+        <div class="text-[11px] uppercase tracking-[0.2em] text-stone font-medium">Confidence & data quality</div>
+        <div class="text-xs text-stone mt-1">how much to trust these measurements — and why</div>
       </div>
+      <span class="text-[10px] uppercase tracking-[0.2em] text-stone font-medium">mixed labels per metric</span>
     </div>
-  </section>
 
-  <!-- Trend chart -->
-  <section class="space-y-4">
-    <div class="flex items-baseline justify-between">
-      <h2 class="font-display text-2xl tracking-tight">Daily activity</h2>
-      <span class="text-xs text-stone italic">your real human time vs cumulative work (human + agents ∥), hours per day</span>
-    </div>
-    <div class="bg-paper dark:bg-graphite border border-mist dark:border-slate rounded-lg p-6">
-      <canvas id="trend-chart" height="80"></canvas>
-    </div>
-  </section>
+    <div class="bg-paper dark:bg-graphite border border-mist dark:border-slate rounded-lg p-7 space-y-8">
 
-  <!-- Trust breakdown -->
-  <section class="space-y-4">
-    <div class="flex items-baseline justify-between">
-      <h2 class="font-display text-2xl tracking-tight">Trust by source</h2>
-      <span class="text-xs text-stone italic">weighted average of event-level confidence</span>
-    </div>
-    <div class="bg-paper dark:bg-graphite border border-mist dark:border-slate rounded-lg p-6">
-      <div id="trust-bars" class="space-y-4">
-        <div class="text-stone text-sm">Loading…</div>
-      </div>
-    </div>
-  </section>
-
-  <!-- Source quality scorecard -->
-  <section class="space-y-4">
-    <div class="flex items-baseline justify-between">
-      <h2 class="font-display text-2xl tracking-tight">Measurement quality</h2>
-      <span class="text-xs text-stone italic">truthfulness of token, cost, and active-time measurements</span>
-    </div>
-    <div class="bg-paper dark:bg-graphite border border-mist dark:border-slate rounded-lg p-6 space-y-5">
-      <div class="grid grid-cols-1 sm:grid-cols-3 gap-px bg-mist dark:bg-slate border border-mist dark:border-slate rounded-lg overflow-hidden">
+      <!-- Headline scores -->
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-px bg-mist dark:bg-slate border border-mist dark:border-slate rounded-lg overflow-hidden">
+        <div class="bg-paper dark:bg-graphite p-5">
+          <div class="text-[11px] uppercase tracking-[0.15em] text-stone font-medium">Trust score</div>
+          <div class="mt-2 font-display text-3xl text-ink dark:text-paper font-numeric" id="metric-trust">—</div>
+          <div class="text-[11px] text-stone mt-1 italic" id="metric-trust-label">—</div>
+        </div>
         <div class="bg-paper dark:bg-graphite p-5">
           <div class="text-[11px] uppercase tracking-[0.15em] text-stone font-medium">Avg source quality</div>
           <div class="mt-2 font-display text-3xl text-ink dark:text-paper font-numeric" id="source-quality-avg">—</div>
@@ -299,9 +222,40 @@
           <div class="mt-2 font-display text-3xl text-ink dark:text-paper font-numeric" id="source-quality-missing">—</div>
         </div>
       </div>
-      <div id="source-quality-bars" class="space-y-4">
-        <div class="text-stone text-sm">Loading…</div>
+
+      <!-- Robustness checks -->
+      <div class="space-y-3">
+        <div class="flex items-baseline justify-between">
+          <h3 class="font-display text-lg tracking-tight">Robustness checks</h3>
+          <span class="text-xs text-stone italic">independent setup signals — do not alter the score</span>
+        </div>
+        <div id="robustness-list" class="space-y-3">
+          <div class="text-stone text-sm">Loading…</div>
+        </div>
       </div>
+
+      <!-- Trust by source -->
+      <div class="space-y-4 border-t border-mist dark:border-slate pt-6">
+        <div class="flex items-baseline justify-between">
+          <h3 class="font-display text-lg tracking-tight">Trust by source</h3>
+          <span class="text-xs text-stone italic">weighted average of event-level confidence</span>
+        </div>
+        <div id="trust-bars" class="space-y-4">
+          <div class="text-stone text-sm">Loading…</div>
+        </div>
+      </div>
+
+      <!-- Measurement quality by source -->
+      <div class="space-y-4 border-t border-mist dark:border-slate pt-6">
+        <div class="flex items-baseline justify-between">
+          <h3 class="font-display text-lg tracking-tight">Measurement quality by source</h3>
+          <span class="text-xs text-stone italic">truthfulness of token, cost, and active-time measurements</span>
+        </div>
+        <div id="source-quality-bars" class="space-y-4">
+          <div class="text-stone text-sm">Loading…</div>
+        </div>
+      </div>
+
     </div>
   </section>
 
@@ -315,9 +269,6 @@
 {% block scripts %}
 <script>
 let trendChart = null;
-let r3CurrentActiveHours = 0;
-const WORKING_DAYS_PER_MONTH = 22;
-const WORKING_HOURS_PER_DAY = 8;
 
 async function fetchJSON(url) {
   const r = await fetch(url);
@@ -339,6 +290,9 @@ async function loadHighlights(days) {
     }
     document.getElementById('metric-days').textContent = h.days_equivalent;
     document.getElementById('metric-leverage').textContent = `×${h.orchestration_factor}`;
+    document.getElementById('engage-active-days').textContent = h.active_days ?? '—';
+    document.getElementById('engage-sources').textContent = h.sources_count ?? '—';
+    document.getElementById('engage-wall').textContent = h.wall_hours != null ? `${h.wall_hours}` : '—';
     // Tokens factuels (compteurs fournisseur, décomposés)
     const tk = h.tokens || {raw: {}, fmt: {}, input_total: 0};
     const tf = tk.fmt || {};
@@ -355,6 +309,8 @@ async function loadHighlights(days) {
     document.getElementById('metric-lines').textContent = fmtInt(h.lines_real);
     document.getElementById('metric-lines-pct').textContent = `${h.real_pct}% of raw · git-line factual`;
     document.getElementById('metric-cost').textContent = fmtCurrency(h.cost_api_equivalent);
+    document.getElementById('metric-cost-per-line').textContent =
+      h.cost_per_line ? `$${h.cost_per_line.toFixed(3)}` : '—';
     const costTruth = h.cost_truth || {};
     const billed = costTruth.billed_estimated_usd || 0;
     const absorbed = costTruth.subscription_absorbed_usd || 0;
@@ -401,95 +357,6 @@ function renderRobustness(checks) {
     `;
     container.appendChild(row);
   });
-}
-
-async function loadProjectsForR3(days) {
-  try {
-    const data = await fetchJSON(`/api/projects?days=${days}`);
-    const select = document.getElementById('r3-project');
-    select.innerHTML = '';
-    if (!data.length) {
-      select.innerHTML = '<option value="">No projects in window</option>';
-      r3CurrentActiveHours = 0;
-      computeR3();
-      return;
-    }
-    // Top 10 by hours
-    data.slice(0, 10).forEach(p => {
-      const opt = document.createElement('option');
-      opt.value = p.project_id;
-      opt.dataset.hours = p.total_hours;
-      opt.dataset.commits = p.commits;
-      opt.dataset.cost = p.total_api_equivalent_cost;
-      opt.dataset.tool = p.dominant_tool;
-      const label = window.anonymizeProjectId(p.project_id);
-      opt.textContent = `${label}  ·  ${p.total_hours}h  ·  ${p.commits} commits`;
-      select.appendChild(opt);
-    });
-    const savedId = localStorage.getItem('ship1000x-r3-project');
-    if (savedId && Array.from(select.options).some(o => o.value === savedId)) {
-      select.value = savedId;
-    }
-    onR3ProjectChange();
-  } catch (e) {
-    console.error('Projects error:', e);
-  }
-}
-
-function loadR3Estimate(projectId) {
-  try {
-    const raw = localStorage.getItem(`ship1000x-r3-est:${projectId}`);
-    if (!raw) return null;
-    return JSON.parse(raw);
-  } catch (e) { return null; }
-}
-
-function saveR3Estimate(projectId, people, months) {
-  localStorage.setItem(`ship1000x-r3-est:${projectId}`,
-    JSON.stringify({people, months}));
-}
-
-function onR3ProjectChange() {
-  const select = document.getElementById('r3-project');
-  const opt = select.selectedOptions[0];
-  if (!opt || !opt.value) {
-    r3CurrentActiveHours = 0;
-    document.getElementById('r3-project-stats').textContent = '—';
-    computeR3();
-    return;
-  }
-  localStorage.setItem('ship1000x-r3-project', opt.value);
-  r3CurrentActiveHours = parseFloat(opt.dataset.hours) || 0;
-  const cost = parseFloat(opt.dataset.cost) || 0;
-  document.getElementById('r3-project-stats').textContent =
-    `${r3CurrentActiveHours}h active · ${opt.dataset.commits} commits · $${cost.toFixed(0)} · ${opt.dataset.tool}`;
-  // Restore saved estimate for this project (if any)
-  const saved = loadR3Estimate(opt.value);
-  if (saved) {
-    document.getElementById('r3-people').value = saved.people;
-    document.getElementById('r3-months').value = saved.months;
-  }
-  computeR3();
-}
-
-function computeR3() {
-  const people = parseFloat(document.getElementById('r3-people').value) || 0;
-  const months = parseFloat(document.getElementById('r3-months').value) || 0;
-  const out = document.getElementById('r3-leverage');
-  const formula = document.getElementById('r3-formula');
-  if (!people || !months || !r3CurrentActiveHours) {
-    out.textContent = '—';
-    formula.textContent = 'pick a project + fill people / months';
-    return;
-  }
-  const teamHours = people * months * WORKING_DAYS_PER_MONTH * WORKING_HOURS_PER_DAY;
-  const leverage = teamHours / r3CurrentActiveHours;
-  out.textContent = `×${leverage.toFixed(1)}`;
-  formula.textContent =
-    `${people} × ${months} mo × ${WORKING_DAYS_PER_MONTH}d × ${WORKING_HOURS_PER_DAY}h = ${teamHours.toFixed(0)}h vs your ${r3CurrentActiveHours}h`;
-  // Persist on each compute (debounced effectively by rapid input changes)
-  const select = document.getElementById('r3-project');
-  if (select.value) saveR3Estimate(select.value, people, months);
 }
 
 async function loadTrend(days) {
@@ -564,6 +431,10 @@ async function loadTrust(days) {
     const data = await fetchJSON(`/api/trust?days=${days}`);
     const container = document.getElementById('trust-bars');
     container.innerHTML = '';
+    if (!data.per_source.length) {
+      container.innerHTML = '<div class="text-stone text-sm italic">No sources in this window.</div>';
+      return;
+    }
     data.per_source.forEach(s => {
       const colorClass = s.score >= 90 ? 'bg-sage'
                         : s.score >= 70 ? 'bg-ambre-500'
@@ -633,15 +504,44 @@ async function loadSourceQuality(days) {
   }
 }
 
+// Inline SVG sparkline of per-model API-equivalent cost over the SELECTED
+// window. Zero-filled on the shared date axis so models line up and the
+// curve clearly tracks the period picker (no deps).
+function costSparkline(daily, axis) {
+  const map = {};
+  (daily || []).forEach(p => { map[p.date] = p.cost || 0; });
+  const pts = (axis || []).map(d => map[d] || 0);
+  if (pts.length < 2 || Math.max(...pts) <= 0) return '<span class="text-stone/40">—</span>';
+  const W = 96, H = 16, max = Math.max(...pts);
+  const dx = W / (pts.length - 1);
+  const coords = pts.map((v, i) => `${(i * dx).toFixed(1)},${(H - (v / max) * H).toFixed(1)}`);
+  const isDark = document.documentElement.classList.contains('dark');
+  const stroke = isDark ? '#c8a464' : '#a8854a';
+  return `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" class="inline-block align-middle" aria-hidden="true">`
+    + `<polyline points="${coords.join(' ')}" fill="none" stroke="${stroke}" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+}
+
 async function loadCostModels(days) {
   try {
     const d = await fetchJSON(`/api/cost-models?days=${days}`);
+    const axis = d.date_axis || [];
     const fmtBig = (n) => (n >= 1e9 ? (n/1e9).toFixed(2)+' Md' : n >= 1e6 ? (n/1e6).toFixed(1)+' M' : n >= 1e3 ? (n/1e3).toFixed(0)+' k' : String(n|0));
     document.getElementById('cm-absorbed').textContent = fmtCurrency(d.totals.subscription_absorbed);
     document.getElementById('cm-apieq').textContent = fmtCurrency(d.totals.api_equivalent);
     const tbody = document.getElementById('cm-rows');
     tbody.innerHTML = '';
-    d.by_model.forEach(m => {
+    // Hide rows with no observed activity (e.g. "unknown" with 0 tokens / $0) —
+    // the API stays complete; the view only drops pure-zero noise.
+    const visible = (d.by_model || []).filter(m =>
+      (m.cost_api_equivalent || 0) > 0
+      || (m.tokens.cache_read || 0) > 0
+      || (m.tokens.output_tokens || 0) > 0);
+    if (!visible.length) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = '<td colspan="6" class="py-4 text-center text-stone italic">No model usage in this window.</td>';
+      tbody.appendChild(tr);
+    }
+    visible.forEach(m => {
       const tr = document.createElement('tr');
       tr.className = 'border-b border-mist/40 dark:border-slate/40';
       const badge = m.pricing_quality === 'exact'
@@ -652,6 +552,7 @@ async function loadCostModels(days) {
         `<td class="py-2 text-right text-stone">${fmtBig(m.tokens.cache_read)}</td>` +
         `<td class="py-2 text-right text-stone">${fmtBig(m.tokens.output_tokens)}</td>` +
         `<td class="py-2 text-right text-ink dark:text-paper">${fmtCurrency(m.cost_api_equivalent)}</td>` +
+        `<td class="py-2 pl-3 text-right hidden sm:table-cell">${costSparkline(m.daily, axis)}</td>` +
         `<td class="py-2 pl-3 text-[11px]">${badge}</td>`;
       tbody.appendChild(tr);
     });
@@ -676,17 +577,9 @@ async function reloadData() {
     loadTrend(days),
     loadTrust(days),
     loadSourceQuality(days),
-    loadProjectsForR3(days),
     loadCostModels(days),
   ]);
 }
-
-// Wire R3 inputs
-document.addEventListener('DOMContentLoaded', () => {
-  document.getElementById('r3-project').addEventListener('change', onR3ProjectChange);
-  document.getElementById('r3-people').addEventListener('input', computeR3);
-  document.getElementById('r3-months').addEventListener('input', computeR3);
-});
 
 reloadData();
 </script>

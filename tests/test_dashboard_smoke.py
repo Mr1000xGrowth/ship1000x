@@ -158,6 +158,24 @@ class TestDashboardSmoke(unittest.TestCase):
         self.assertIn("billed-est.", html)
         self.assertIn("unknown-basis", html)
 
+    def test_estimate_page_returns_200(self):
+        client = self._make_client()
+        r = client.get("/estimate")
+        self.assertEqual(r.status_code, 200)
+        html = r.get_data(as_text=True)
+        # Indicative / estimative ratios live here, not on Overview.
+        self.assertIn("Agent efficiency", html)
+        self.assertIn("Project output vs human team", html)
+        self.assertIn("total_api_equivalent_cost", html)
+        self.assertIn("not measured", html)
+
+    def test_overview_excludes_estimative_blocks(self):
+        client = self._make_client()
+        html = client.get("/").get_data(as_text=True)
+        # R2/R3 moved to the Estimate tab; Overview is measured-only.
+        self.assertNotIn("Agent efficiency", html)
+        self.assertNotIn("Project output vs human team", html)
+
     def test_api_highlights_returns_valid_json(self):
         client = self._make_client()
         r = client.get("/api/highlights?days=30")
@@ -466,7 +484,6 @@ class TestDashboardSmoke(unittest.TestCase):
         self.assertIn("Measurement quality", html)
         self.assertIn("API-equivalent cost", html)
         self.assertIn("cost_api_equivalent", html)
-        self.assertIn("total_api_equivalent_cost", html)
         self.assertIn("metric-cost-billing-label", html)
         self.assertIn("native token/pricing", html)
         self.assertIn("remainder indicative/unknown", html)

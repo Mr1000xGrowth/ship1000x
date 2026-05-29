@@ -158,6 +158,10 @@ def create_app(db_path: Path, config_dir: Path) -> Flask:
     def projects_page():
         return render_template("projects.html")
 
+    @app.route("/estimate")
+    def estimate_page():
+        return render_template("estimate.html")
+
     # ─── API endpoints ─────────────────────────────────────────────────
 
     @app.route("/api/highlights")
@@ -185,6 +189,11 @@ def create_app(db_path: Path, config_dir: Path) -> Flask:
             sources_count = conn.execute(
                 "SELECT COUNT(DISTINCT source) AS n FROM events "
                 "WHERE date(started_at) >= date('now', ? || ' days')",
+                (f"-{days}",),
+            ).fetchone()["n"] or 0
+            active_days = conn.execute(
+                "SELECT COUNT(*) AS n FROM daily_unified "
+                "WHERE date >= date('now', ? || ' days') AND active_sec_unified > 0",
                 (f"-{days}",),
             ).fetchone()["n"] or 0
             cost_truth = _compute_cost_truth(conn, days)
@@ -252,6 +261,7 @@ def create_app(db_path: Path, config_dir: Path) -> Flask:
             "trust_label": trust["label"],
             "trust_robustness": trust.get("robustness_checks", []),
             "sources_count": sources_count,
+            "active_days": active_days,
             "threshold_min": round(threshold_min, 1),
         })
 
@@ -346,9 +356,15 @@ def create_app(db_path: Path, config_dir: Path) -> Flask:
             f"{m['provider']}/{m['model']}" for m in models
             if m["pricing_quality"] == "fallback"
         ]
+        # Shared daily axis for the whole window so per-model sparklines line up
+        # (zero-filled on inactive days) and clearly track the selected period.
+        from datetime import date, timedelta
+        today = date.today()
+        date_axis = [(today - timedelta(days=i)).isoformat() for i in range(days, -1, -1)]
         return jsonify({
             "schema_version": "ship1000x.dashboard.cost_models.v1",
             "window_days": days,
+            "date_axis": date_axis,
             "totals": {
                 "token_metered": round(total_api, 2),
                 "hourly_estimated": round(hourly_estimated, 2),
