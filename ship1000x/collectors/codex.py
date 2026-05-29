@@ -23,6 +23,17 @@ from ship1000x.core.usage import TokenBreakdown, build_usage_metadata
 CODEX_SESSIONS_DIR = Path.home() / ".codex" / "sessions"
 ACTIVE_PAUSE_THRESHOLD_SEC = 5 * 60
 SHORT_APPROVAL_WORDS = 5
+
+# Type codes pour event_timeline (V4). Sync avec
+# claude_code._MSG_TYPE_CODES et cadence.HUMAN_CODES (0/1/2 = humains).
+# Codex ne produit que typed/approval/system cote user + tool_call (code 3).
+_MSG_TYPE_CODES = {
+    "typed": 0,
+    "approval": 1,
+    "paste": 2,
+    "tool_result": 4,
+    "system": 5,
+}
 import os as _os_max  # noqa
 # Cap per session : protects against 'app left open' aberrations.
 # Override via env var SHIP1000X_MAX_SESSION_HOURS for power users
@@ -97,6 +108,7 @@ def parse_session_file(path: Path) -> dict[str, Any]:
     last_ts: str | None = None
     tool_paths: list[str] = []
     user_events_ts: list[tuple[str, str]] = []  # (timestamp, msg_type)
+    tool_events_ts: list[str] = []  # timestamps des function_call (code 3)
     # Originator written by Codex in session_meta.originator
     # ("codex-tui", "codex-cli", "codex-desktop"). Used by the auth_mode
     # detector to decide OAuth (ChatGPT login) vs API key.
@@ -187,6 +199,8 @@ def parse_session_file(path: Path) -> dict[str, Any]:
                     elif p_type == "function_call":
                         tool_call_count += 1
                         tool_paths.extend(_extract_tool_paths_codex(payload))
+                        if ts:
+                            tool_events_ts.append(ts)
 
                     elif p_type == "function_call_output":
                         # Tool result, pas un vrai user message
@@ -281,6 +295,23 @@ def parse_session_file(path: Path) -> dict[str, Any]:
         cached_input_tokens=cached_input,
         reasoning_output_tokens=reasoning_output,
     )
+    # event_timeline V4 : [[epoch_sec, type_code], ...] trie. Permet au calcul
+    # unifie cross-sources (core.unified_metrics) de fusionner les events
+    # humains Codex avec ceux de Claude Code/openclaw. Sans ca, Codex compte
+    # zero dans daily_unified malgre des sessions ingerees.
+    event_timeline: list[list[int]] = []
+    for ts, msg_type in user_events_ts:
+        epoch = _parse_timestamp(ts)
+        if epoch is None:
+            continue
+        event_timeline.append([int(epoch.timestamp()), _MSG_TYPE_CODES.get(msg_type, 9)])
+    for ts in tool_events_ts:
+        epoch = _parse_timestamp(ts)
+        if epoch is None:
+            continue
+        event_timeline.append([int(epoch.timestamp()), 3])
+    event_timeline.sort(key=lambda x: x[0])
+
     auth_mode = detect_codex_auth_mode(originator=originator)
     usage = build_usage_metadata(
         provider="openai",
@@ -315,6 +346,7 @@ def parse_session_file(path: Path) -> dict[str, Any]:
         "cost_estimated": cost_estimated,
         "usage": usage,
         "user_msg_counts": user_msg_counts,
+        "event_timeline": event_timeline,
     }
 
 
@@ -401,10 +433,32 @@ def collect(storage, classifier, privacy_config: dict[str, Any]) -> dict[str, in
                 "cached_input_tokens": parsed.get("cached_input_tokens", 0),
                 "reasoning_output_tokens": parsed.get("reasoning_output_tokens", 0),
                 "usage": parsed.get("usage", {}),
+                "event_timeline": parsed.get("event_timeline", []),
+                # Capture exhaustive : meme schema superset que claude_code.
+                # OpenAI : input_tokens INCLUT cached ; output INCLUT reasoning.
+                # Pas de cache_write ni service_tier exposes par les rollouts.
+                "usage_breakdown": {
+                    "provider": "openai",
+                    "fresh_input": max(0, (parsed["tokens_input"] or 0) - (parsed.get("cached_input_tokens", 0) or 0)),
+                    "cache_read": parsed.get("cached_input_tokens", 0) or 0,
+                    "cache_write": 0,
+                    "cache_write_5m": 0,
+                    "cache_write_1h": 0,
+                    "output_tokens": parsed["tokens_output"] or 0,
+                    "thinking": 0,
+                    "reasoning": parsed.get("reasoning_output_tokens", 0) or 0,
+                    "web_search_requests": 0,
+                    "web_fetch_requests": 0,
+                    "service_tier": None,
+                },
             }),
         }
         safe = sanitize_event(event)
-        storage.upsert_event(safe)
+        # replace=True : un rollout Codex agrege toute la session en 1 event et
+        # grossit au fil du temps (le fichier actif est re-scanne quand il
+        # depasse l'offset). INSERT OR IGNORE figerait tokens/active_sec/
+        # event_timeline au 1er insert. Meme semantique que claude_code/openclaw.
+        storage.upsert_event(safe, replace=True)
         stats["events_ingested"] += 1
         stats["sessions_ingested"] += 1
 

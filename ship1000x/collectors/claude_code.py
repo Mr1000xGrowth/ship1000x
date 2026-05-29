@@ -363,6 +363,14 @@ def parse_session_file(path: Path) -> dict[str, Any]:
         "tokens_output": 0,
         "cache_read_tokens": 0,
         "cache_write_tokens": 0,
+        # Superset usage Anthropic (capture exhaustive) : on agrege TOUS les
+        # champs exposes par l'API, meme ceux a 0 aujourd'hui (future-proof).
+        "cache_write_5m_tokens": 0,    # cache_creation.ephemeral_5m_input_tokens
+        "cache_write_1h_tokens": 0,    # cache_creation.ephemeral_1h_input_tokens (coute 2x)
+        "thinking_tokens": 0,          # output_tokens_details.thinking_tokens
+        "web_search_requests": 0,      # server_tool_use.web_search_requests (facture)
+        "web_fetch_requests": 0,       # server_tool_use.web_fetch_requests
+        "service_tier": None,          # standard | priority | batch (impacte le prix)
         "cost": 0.0,
         "user_msg_counts": {"typed": 0, "approval": 0, "tool_result": 0, "system": 0, "paste": 0},
         "assistant_turns": 0,
@@ -453,6 +461,16 @@ def parse_session_file(path: Path) -> dict[str, Any]:
                     tout = usage.get("output_tokens", 0) or 0
                     cache_read = usage.get("cache_read_input_tokens", 0) or 0
                     cache_create = usage.get("cache_creation_input_tokens", 0) or 0
+                    # Superset : sous-champs exposes par l'API Anthropic.
+                    _cc = usage.get("cache_creation") or {}
+                    cw5 = _cc.get("ephemeral_5m_input_tokens", 0) or 0
+                    cw1h = _cc.get("ephemeral_1h_input_tokens", 0) or 0
+                    _otd = usage.get("output_tokens_details") or {}
+                    thinking = _otd.get("thinking_tokens", 0) or 0
+                    _stu = usage.get("server_tool_use") or {}
+                    web_search = _stu.get("web_search_requests", 0) or 0
+                    web_fetch = _stu.get("web_fetch_requests", 0) or 0
+                    tier = usage.get("service_tier")
                     total_cache_read += cache_read
                     total_cache_write += cache_create
                     total_tok_in += tin + cache_read + cache_create
@@ -464,6 +482,13 @@ def parse_session_file(path: Path) -> dict[str, Any]:
                     d["tokens_output"] += tout
                     d["cache_read_tokens"] += cache_read
                     d["cache_write_tokens"] += cache_create
+                    d["cache_write_5m_tokens"] += cw5
+                    d["cache_write_1h_tokens"] += cw1h
+                    d["thinking_tokens"] += thinking
+                    d["web_search_requests"] += web_search
+                    d["web_fetch_requests"] += web_fetch
+                    if tier and not d["service_tier"]:
+                        d["service_tier"] = tier
                     d["cost"] += cost_here
                     d["assistant_turns"] += 1
                     if ts:
@@ -692,6 +717,23 @@ def collect(storage, classifier, privacy_config: dict[str, Any]) -> dict[str, in
                             for m, s in d["model_stats"].items()
                         },
                         "usage": _build_daily_usage_metadata(d, ratio),
+                        # Capture exhaustive : superset normalise de TOUS les
+                        # champs usage Anthropic (meme schema cross-provider).
+                        # total_input = fresh + cache_read + cache_write.
+                        "usage_breakdown": {
+                            "provider": "anthropic",
+                            "fresh_input": int(d["tokens_input_uncached"] * ratio),
+                            "cache_read": int(d["cache_read_tokens"] * ratio),
+                            "cache_write": int(d["cache_write_tokens"] * ratio),
+                            "cache_write_5m": int(d["cache_write_5m_tokens"] * ratio),
+                            "cache_write_1h": int(d["cache_write_1h_tokens"] * ratio),
+                            "output_tokens": int(d["tokens_output"] * ratio),
+                            "thinking": int(d["thinking_tokens"] * ratio),
+                            "reasoning": 0,
+                            "web_search_requests": int(d["web_search_requests"] * ratio),
+                            "web_fetch_requests": int(d["web_fetch_requests"] * ratio),
+                            "service_tier": d["service_tier"],
+                        },
                     }),
                 }
                 safe = sanitize_event(event)

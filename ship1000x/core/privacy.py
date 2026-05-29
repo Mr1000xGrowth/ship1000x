@@ -109,6 +109,9 @@ ALLOWED_META_KEYS = {
     "model_stats", "event_timeline", "tool_calls", "split_ratio",
     # Usage/cost quality metadata (safe structured counters only)
     "usage",
+    # Superset normalise des tokens cross-provider (capture exhaustive).
+    # Compteurs numeriques + categoriques (provider, service_tier) — aucun contenu.
+    "usage_breakdown",
     # Paths a anonymiser (traites specifiquement plus bas)
     "paths_sampled", "files_touched", "log_file",
 }

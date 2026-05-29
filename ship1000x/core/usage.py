@@ -26,6 +26,46 @@ _POLICY_SNAPSHOT_KEYS = frozenset({
 })
 
 
+# ──────────────────────────────────────────────────────────────────────────
+# Contrat usage_breakdown — superset normalise cross-provider (capture exhaustive)
+#
+# Chaque collecteur emet raw_meta["usage_breakdown"] selon CE schema, en
+# capturant TOUT ce que le provider expose, meme les champs a 0 (pour ne
+# jamais perdre une donnee observable).
+#   Invariant : total_input = fresh_input + cache_read + cache_write
+#               output_tokens inclut reasoning/thinking selon le provider
+#
+# FUTURS PROVIDERS (Gemini, Mistral, local LM Studio, ...) : suivre ce schema.
+# Mapper les champs natifs ici ; mettre 0 pour ce qui n'est pas expose.
+# ──────────────────────────────────────────────────────────────────────────
+USAGE_BREAKDOWN_FIELDS = (
+    "fresh_input", "cache_read", "cache_write", "cache_write_5m",
+    "cache_write_1h", "output_tokens", "thinking", "reasoning",
+    "web_search_requests", "web_fetch_requests",
+)
+
+
+def empty_usage_breakdown(provider: str) -> dict:
+    """Gabarit usage_breakdown a zero (coherence cross-collector)."""
+    d: dict = {f: 0 for f in USAGE_BREAKDOWN_FIELDS}
+    d["provider"] = provider
+    d["service_tier"] = None
+    return d
+
+
+def format_token_count(n: int | float) -> str:
+    """Unites adaptatives lisibles : 1234 -> '1.2 k', 2.3e6 -> '2.3 M', 1.5e9 -> '1.50 Md'."""
+    val = float(n or 0)
+    a = abs(val)
+    if a >= 1e9:
+        return f"{val / 1e9:.2f} Md"
+    if a >= 1e6:
+        return f"{val / 1e6:.1f} M"
+    if a >= 1e3:
+        return f"{val / 1e3:.0f} k"
+    return str(int(val))
+
+
 @dataclass(frozen=True)
 class TokenBreakdown:
     input_tokens: int = 0
