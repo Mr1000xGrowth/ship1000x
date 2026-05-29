@@ -185,17 +185,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Vertex-Anthropic precedence, 7 vendors smoke-coverage, regression
   unmapped-fallback). 27 tests `test_pricing_litellm.py` (was 17),
   492 tests suite totale.
-- **`docs/design/COPILOT_AGENTS_PROMOTION.md`** — design doc Wave 7+
-  batch 7f. 4 candidate paths identifiés mais 3 explicitement
-  "could change between updates" — plan 4-phase avec Phase 0 surface
-  scoping. V1 ciblerait `<workspace-storage>/GitHub.copilot-chat/`
-  uniquement. Custom `.instructions.md` hors scope V1.
-- **`docs/design/CURSOR_AGENT_PROMOTION.md`** — design doc Wave 7+
-  (sub-lot, complète batch 7a). Couplage explicite avec
-  `CURSOR_DEEP_PARSING.md` (Wave 3 D6-7) : Cursor Agent partage le
-  même `state.vscdb` que la deep parsing Cursor — Option A
-  recommandée (ship deep parsing reader d'abord, Cursor Agent
-  filtre `composerData` type agent ensuite).
 - **`ship1000x.collectors.roo_kilo_code`** promoted from fixture-only
   parser to active collector — first Wave 7+ batch 7a delivery. Now
   ingests live tasks from Roo Code (legacy, shutdown 2026-04-21) and
@@ -275,12 +264,6 @@ Wave 2.5 + Wave 3 (live runtime) + Wave 4 SHIP-side bridge.
   (9-key redacted records from the proxy's pipeline) and emits `api_call`
   events. Confidence mapping: `factual` → high, `estimated` → medium.
   50 MB read cap per file as defence against a misbehaving proxy. (#52)
-- **`docs/design/CURSOR_DEEP_PARSING.md`** — design doc for the
-  Wave 3 / Day 6-7 Cursor IDE deep-parsing collector. Catalogues the
-  schema discovered in `~/Library/Application Support/Cursor/User/
-  globalStorage/state.vscdb` (81 714 rows, 132 `composerData` blobs
-  up to 162 MB). Five-phase implementation plan + privacy + perf
-  notes; implementation deferred pending controlled data access. (#49)
 - **`SourceEntry.drop_subpath`** — new optional field on the
   coverage registry pointing at a daemon's drop directory. When set
   on a `SUPPORTED` source with no events in the window, the
