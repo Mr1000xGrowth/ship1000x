@@ -370,6 +370,22 @@ class SQLiteStorage:
         with self.conn() as c:
             c.execute(sql, values)
 
+    def delete_events_for_session(self, source: str, session_id: str) -> int:
+        """Supprime tous les events d'une session (par session_id dans raw_meta).
+
+        Utilise par les collectors qui re-emettent les events d'une session a
+        chaque ingestion : evite les ORPHELINS quand la classification projet
+        change entre deux passes (l'id d'event embarque le projet, donc un
+        changement de classif cree un nouvel event sans remplacer l'ancien).
+        """
+        with self.conn() as c:
+            cur = c.execute(
+                "DELETE FROM events WHERE source = ? "
+                "AND json_extract(raw_meta, '$.session_id') = ?",
+                (source, session_id),
+            )
+            return cur.rowcount
+
     def upsert_session(self, session: dict[str, Any]) -> None:
         cols = [
             "id", "source", "started_at", "ended_at", "event_count",

@@ -656,8 +656,10 @@ async function loadCostModels(days) {
       tbody.appendChild(tr);
     });
     const fb = d.pricing.fallback_models;
+    const t = d.totals;
     document.getElementById('cm-pricing-note').textContent =
-      `Pricing snapshot ${d.pricing.version}` +
+      `Reconciliation: token-metered ${fmtCurrency(t.token_metered)} + hourly-estimated ${fmtCurrency(t.hourly_estimated)} = ${fmtCurrency(t.api_equivalent)} total · ` +
+      `pricing snapshot ${d.pricing.version}` +
       (fb.length ? ` · ${fb.length} model(s) without exact rate: ${fb.join(', ')}` : ' · all models priced') +
       ` · ${d.pricing.note}`;
   } catch (e) { /* table reste vide */ }

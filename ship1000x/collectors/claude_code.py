@@ -632,6 +632,13 @@ def collect(storage, classifier, privacy_config: dict[str, Any]) -> dict[str, in
         }
         storage.upsert_session(session_event)
 
+        # Replace-by-session : on supprime les events precedents de cette session
+        # avant de re-emettre ceux du parse courant. Sinon, si la classification
+        # projet change entre deux ingestions, l'ancien event (autre project_id)
+        # reste orphelin et double-compte le cout. session_id = nom de fichier
+        # (unique par fichier), donc on ne touche que cette session.
+        storage.delete_events_for_session("claude_code", parsed["session_id"])
+
         # Store des events par JOUR pour la session (sessions multi-jours avec /compact).
         # Split multi-projets : si la session touche plusieurs repos via tool_paths,
         # on cree 1 event par projet touche avec duration/wall_clock/cost ponderes.

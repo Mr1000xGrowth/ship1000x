@@ -301,6 +301,16 @@ def create_app(db_path: Path, config_dir: Path) -> Flask:
             pricing_version = conn.execute(
                 "SELECT MAX(pricing_version) v FROM daily_model_usage"
             ).fetchone()["v"]
+            # Coût des events SANS usage_breakdown (sources horaires-estimées :
+            # codex_macapp, sessions dont le fichier a disparu...). Pas dans la
+            # table par-modèle, mais nécessaire pour réconcilier avec le total
+            # global affiché ailleurs (bloc highlights).
+            hourly_estimated = conn.execute(
+                "SELECT COALESCE(SUM(cost_estimated), 0) c FROM events "
+                "WHERE source != 'git' AND date(started_at) >= date('now', ? || ' days') "
+                "AND json_extract(raw_meta, '$.usage_breakdown') IS NULL",
+                (f"-{days}",),
+            ).fetchone()["c"] or 0.0
 
         by_model: dict[tuple, dict] = {}
         total_api = total_billed = 0.0
@@ -339,9 +349,11 @@ def create_app(db_path: Path, config_dir: Path) -> Flask:
             "schema_version": "ship1000x.dashboard.cost_models.v1",
             "window_days": days,
             "totals": {
-                "api_equivalent": round(total_api, 2),
+                "token_metered": round(total_api, 2),
+                "hourly_estimated": round(hourly_estimated, 2),
+                "api_equivalent": round(total_api + hourly_estimated, 2),
                 "billed": round(total_billed, 2),
-                "subscription_absorbed": round(total_api - total_billed, 2),
+                "subscription_absorbed": round(total_api + hourly_estimated - total_billed, 2),
             },
             "by_model": models,
             "pricing": {
