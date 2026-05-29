@@ -16,10 +16,25 @@ Mise a jour 2026-04-21.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date
 from typing import Literal
 
 PRICING_SOURCE = "ship1000x.core.pricing"
 PRICING_VERSION = "2026-04-21"
+# Au-dela de ce seuil, le snapshot tarifaire est considere perime (les tarifs
+# LLM bougent ; un coût API-equivalent base sur de vieux tarifs derive).
+PRICING_STALE_DAYS = 60
+
+
+def pricing_freshness(today: date | None = None) -> dict:
+    """Fraicheur du snapshot tarifaire : version, age en jours, perime ?"""
+    today = today or date.today()
+    try:
+        snap = date.fromisoformat(PRICING_VERSION)
+        age = (today - snap).days
+    except ValueError:
+        return {"version": PRICING_VERSION, "age_days": None, "stale": False}
+    return {"version": PRICING_VERSION, "age_days": age, "stale": age > PRICING_STALE_DAYS}
 
 PricingMatchQuality = Literal["exact", "alias", "fallback", "unknown"]
 

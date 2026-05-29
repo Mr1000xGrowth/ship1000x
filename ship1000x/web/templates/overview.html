@@ -657,9 +657,13 @@ async function loadCostModels(days) {
     });
     const fb = d.pricing.fallback_models;
     const t = d.totals;
+    const fr = d.pricing.freshness || {};
+    const freshTxt = (fr.age_days != null)
+      ? `pricing snapshot ${d.pricing.version} (${fr.age_days}d old${fr.stale ? ' ⚠ stale — refresh recommended' : ''})`
+      : `pricing snapshot ${d.pricing.version}`;
     document.getElementById('cm-pricing-note').textContent =
       `Reconciliation: token-metered ${fmtCurrency(t.token_metered)} + hourly-estimated ${fmtCurrency(t.hourly_estimated)} = ${fmtCurrency(t.api_equivalent)} total · ` +
-      `pricing snapshot ${d.pricing.version}` +
+      freshTxt +
       (fb.length ? ` · ${fb.length} model(s) without exact rate: ${fb.join(', ')}` : ' · all models priced') +
       ` · ${d.pricing.note}`;
   } catch (e) { /* table reste vide */ }

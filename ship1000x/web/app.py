@@ -23,6 +23,7 @@ from ship1000x.core.cost_truth import (
     event_cost_truth,
     safe_raw_meta,
 )
+from ship1000x.core.pricing import pricing_freshness
 from ship1000x.core.usage import format_token_count as _fmt_tok
 
 
@@ -359,6 +360,7 @@ def create_app(db_path: Path, config_dir: Path) -> Flask:
             "pricing": {
                 "version": pricing_version,
                 "fallback_models": fallback_models,
+                "freshness": pricing_freshness(),
                 "note": "API-equivalent = what-if at API rates, not an invoice.",
             },
         })

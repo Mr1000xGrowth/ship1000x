@@ -2354,6 +2354,44 @@ def dashboard(port: int, no_open: bool):
     run_server(DB_PATH, CONFIG_DIR, port=port, open_browser=not no_open)
 
 
+@cli.command("pricing-status")
+def pricing_status_cmd():
+    """Fraicheur du snapshot tarifaire + modeles vus sans tarif exact.
+
+    Le cout API-equivalent s'appuie sur un snapshot date (vendore). Les tarifs
+    LLM bougent : cette commande dit l'age du snapshot et liste les modeles
+    captes qui n'ont pas de tarif exact (a ajouter deliberement, pas devine).
+    """
+    from ship1000x.core.pricing import pricing_freshness
+    fr = pricing_freshness()
+    age = fr.get("age_days")
+    console.print(f"[bold]Snapshot tarifaire[/bold] : {fr['version']}", end="")
+    if age is not None:
+        flag = " [red]⚠ perime — rafraichir[/red]" if fr["stale"] else " [green](frais)[/green]"
+        console.print(f"  ({age} jours){flag}")
+    else:
+        console.print()
+
+    storage = _get_storage()
+    with storage.conn() as conn:
+        rows = conn.execute(
+            "SELECT provider, model, SUM(cost_api_equivalent) c, "
+            "MAX(pricing_quality) q FROM daily_model_usage "
+            "GROUP BY provider, model ORDER BY c DESC"
+        ).fetchall()
+    fallback = [r for r in rows if r["q"] == "fallback"]
+    if fallback:
+        console.print("\n[yellow]Modeles sans tarif exact (fallback) — a tarifer :[/yellow]")
+        for r in fallback:
+            console.print(f"  - {r['provider']}/{r['model']}  (cout estime ${r['c'] or 0:,.0f})".replace(",", " "))
+        console.print(
+            "\n[dim]Pour tarifer : ajouter le modele dans ship1000x/core/pricing.py "
+            "(ANTHROPIC_PRICING / OPENAI_PRICING) puis `ship1000x rollup`.[/dim]"
+        )
+    else:
+        console.print("\n[green]Tous les modeles captes ont un tarif exact.[/green]")
+
+
 @cli.command()
 def pulse():
     """One-line daily check : your habit-forming morning command.
