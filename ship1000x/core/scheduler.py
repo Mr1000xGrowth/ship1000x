@@ -1,80 +1,144 @@
 """Scheduler launchd macOS.
 
-Genere un plist a partir du template, l'installe dans ~/Library/LaunchAgents,
-le charge avec launchctl. Le plist lance chaque nuit `ship1000x daily` qui
-chaine ingest + rollup + push.
+Genere un plist en dur (pas de fichier template externe), l'installe dans
+~/Library/LaunchAgents et le charge via `launchctl bootstrap gui/$UID`. Le
+plist lance chaque nuit `ship1000x daily` qui chaine ingest + rollup + push.
+
+launchd n'herite ni du PATH ni du venv courant : on resout donc le binaire
+`ship1000x` vers un chemin ABSOLU au moment de l'installation.
 """
 
 from __future__ import annotations
 
+import os
+import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 LABEL = "com.mr1000xgrowth.ship1000x"
 LAUNCH_AGENTS = Path.home() / "Library" / "LaunchAgents"
+LOG_DIR = Path.home() / "Library" / "Logs"
 
 
-def install(repo_root: Path, hour: int, minute: int) -> str:
-    """Installe le plist launchd. Retourne le chemin du fichier cree."""
-    template_path = repo_root / "scheduler" / "launchd.plist.template"
-    if not template_path.exists():
-        raise RuntimeError(f"Template introuvable : {template_path}")
+def _plist_path() -> Path:
+    return LAUNCH_AGENTS / f"{LABEL}.plist"
 
-    plist_content = template_path.read_text()
-    plist_content = plist_content.replace("__TRACKER_DIR__", str(repo_root))
-    plist_content = plist_content.replace("__HOME__", str(Path.home()))
-    plist_content = plist_content.replace("__HOUR__", str(hour))
-    plist_content = plist_content.replace("__MINUTE__", str(minute))
+
+def _domain_target() -> str:
+    return f"gui/{os.getuid()}/{LABEL}"
+
+
+def _resolve_ship_args() -> list[str]:
+    """Resout l'invocation absolue de la commande `ship1000x daily`.
+
+    launchd ne voit pas le PATH du shell ni le venv actif, il faut un chemin
+    absolu. Ordre : binaire sur le PATH courant -> binaire a cote de
+    l'interpreteur (venv/bin) -> module via l'interpreteur courant.
+    """
+    found = shutil.which("ship1000x")
+    if found:
+        return [str(Path(found).resolve()), "daily"]
+
+    # Console script installe dans le bin du venv/prefix courant.
+    for base in (Path(sys.prefix), Path(sys.executable).resolve().parent.parent):
+        candidate = base / "bin" / "ship1000x"
+        if candidate.exists():
+            return [str(candidate), "daily"]
+
+    # Dernier recours : module via l'interpreteur courant (chemin absolu).
+    return [sys.executable, "-m", "ship1000x", "daily"]
+
+
+def _render_plist(hour: int, minute: int) -> str:
+    program_args = "".join(
+        f"    <string>{arg}</string>\n" for arg in _resolve_ship_args()
+    )
+    stdout_log = LOG_DIR / "ship1000x-daily.log"
+    stderr_log = LOG_DIR / "ship1000x-daily.err.log"
+    return f"""<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>{LABEL}</string>
+  <key>ProgramArguments</key>
+  <array>
+{program_args}  </array>
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key><integer>{hour}</integer>
+    <key>Minute</key><integer>{minute}</integer>
+  </dict>
+  <key>StandardOutPath</key>
+  <string>{stdout_log}</string>
+  <key>StandardErrorPath</key>
+  <string>{stderr_log}</string>
+  <key>RunAtLoad</key>
+  <false/>
+</dict>
+</plist>
+"""
+
+
+def install(hour: int, minute: int) -> str:
+    """Installe le plist launchd (agent daily). Retourne le chemin du fichier."""
+    if not 0 <= hour <= 23 or not 0 <= minute <= 59:
+        raise RuntimeError(f"Heure invalide : {hour:02d}:{minute:02d}")
 
     LAUNCH_AGENTS.mkdir(parents=True, exist_ok=True)
-    plist_path = LAUNCH_AGENTS / f"{LABEL}.plist"
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
+    plist_path = _plist_path()
 
-    # Unload si deja present (avant d'ecraser)
-    if plist_path.exists():
-        subprocess.run(
-            ["launchctl", "unload", str(plist_path)],
-            capture_output=True,
-        )
+    plist_path.write_text(_render_plist(hour, minute))
 
-    plist_path.write_text(plist_content)
+    # Valide le plist avant de charger (echec rapide, message clair).
+    lint = subprocess.run(
+        ["plutil", "-lint", str(plist_path)],
+        capture_output=True,
+        text=True,
+    )
+    if lint.returncode != 0:
+        raise RuntimeError(f"plist invalide : {lint.stdout.strip() or lint.stderr.strip()}")
+
+    # Idempotent : bootout si deja charge, puis bootstrap.
+    target = _domain_target()
+    if subprocess.run(["launchctl", "print", target], capture_output=True).returncode == 0:
+        subprocess.run(["launchctl", "bootout", target], capture_output=True)
 
     result = subprocess.run(
-        ["launchctl", "load", str(plist_path)],
+        ["launchctl", "bootstrap", f"gui/{os.getuid()}", str(plist_path)],
         capture_output=True,
         text=True,
     )
     if result.returncode != 0:
-        raise RuntimeError(f"launchctl load echec : {result.stderr}")
+        raise RuntimeError(f"launchctl bootstrap echec : {result.stderr.strip() or result.stdout.strip()}")
 
     return str(plist_path)
 
 
 def uninstall() -> bool:
     """Desinstalle le scheduler. Retourne True si qqch a ete supprime."""
-    plist_path = LAUNCH_AGENTS / f"{LABEL}.plist"
+    plist_path = _plist_path()
     if not plist_path.exists():
         return False
 
-    subprocess.run(
-        ["launchctl", "unload", str(plist_path)],
-        capture_output=True,
-    )
+    subprocess.run(["launchctl", "bootout", _domain_target()], capture_output=True)
     plist_path.unlink()
     return True
 
 
 def is_installed() -> bool:
-    plist_path = LAUNCH_AGENTS / f"{LABEL}.plist"
-    return plist_path.exists()
+    return _plist_path().exists()
 
 
 def status() -> dict:
-    plist_path = LAUNCH_AGENTS / f"{LABEL}.plist"
+    plist_path = _plist_path()
     if not plist_path.exists():
         return {"installed": False}
 
     result = subprocess.run(
-        ["launchctl", "list", LABEL],
+        ["launchctl", "print", _domain_target()],
         capture_output=True,
         text=True,
     )
@@ -82,5 +146,4 @@ def status() -> dict:
         "installed": True,
         "plist_path": str(plist_path),
         "loaded": result.returncode == 0,
-        "launchctl_output": result.stdout.strip() if result.stdout else result.stderr.strip(),
     }
