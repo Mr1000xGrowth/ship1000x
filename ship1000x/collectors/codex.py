@@ -343,6 +343,7 @@ def parse_session_file(path: Path) -> dict[str, Any]:
         "cached_input_tokens": cached_input,
         "reasoning_output_tokens": reasoning_output,
         "model": model,
+        "originator": originator,
         "cost_estimated": cost_estimated,
         "usage": usage,
         "user_msg_counts": user_msg_counts,
@@ -430,6 +431,10 @@ def collect(storage, classifier, privacy_config: dict[str, Any]) -> dict[str, in
                 "user_msg_counts": parsed["user_msg_counts"],
                 "tool_calls": parsed["tool_call_count"],
                 "model": parsed.get("model", ""),
+                # Client Codex (Desktop/CLI-exec/CLI-tui/SDK). Enum catégoriel
+                # autorisé par l'allowlist privacy → surfacé en colonne « Client »
+                # de l'audit log. Distingue ce que source='codex' aplatit.
+                "originator": parsed.get("originator") or "",
                 "cached_input_tokens": parsed.get("cached_input_tokens", 0),
                 "reasoning_output_tokens": parsed.get("reasoning_output_tokens", 0),
                 "usage": parsed.get("usage", {}),

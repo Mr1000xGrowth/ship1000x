@@ -1,0 +1,237 @@
+{% extends "base.html" %}
+
+{% block title %}Audit · Ship1000x{% endblock %}
+
+{% block content %}
+<div class="space-y-8">
+
+  <header class="space-y-2">
+    <h1 class="font-display text-4xl tracking-tight">Audit log</h1>
+    <p class="text-stone text-sm">
+      <span id="window-label">Last 30 days</span> · 1 row = 1 tracked event ·
+      <span class="italic">metadata only, never any content</span>
+    </p>
+  </header>
+
+  <!-- Filters -->
+  <div class="space-y-3">
+    <div class="flex gap-4 items-center flex-wrap">
+      <input type="text" id="filter-q" placeholder="Search source · provider · model · project…"
+             class="bg-paper dark:bg-graphite border border-mist dark:border-slate rounded-md px-4 py-2 text-sm w-full max-w-md focus:outline-none focus:border-ambre-500 transition">
+      <select id="filter-source" class="bg-paper dark:bg-graphite border border-mist dark:border-slate rounded-md px-3 py-2 text-xs text-stone">
+        <option value="">All sources</option>
+      </select>
+      <select id="filter-provider" class="bg-paper dark:bg-graphite border border-mist dark:border-slate rounded-md px-3 py-2 text-xs text-stone">
+        <option value="">All providers</option>
+      </select>
+      <select id="filter-model" class="bg-paper dark:bg-graphite border border-mist dark:border-slate rounded-md px-3 py-2 text-xs text-stone">
+        <option value="">All models</option>
+      </select>
+      <span class="text-xs text-stone italic" id="result-count">— events</span>
+    </div>
+  </div>
+
+  <div class="bg-paper dark:bg-graphite border border-mist dark:border-slate rounded-lg overflow-hidden">
+    <div class="overflow-x-auto">
+      <table class="min-w-full text-sm">
+        <thead>
+          <tr class="border-b border-mist dark:border-slate text-stone text-[11px] uppercase tracking-[0.15em] font-medium">
+            <th class="px-4 py-4 text-left">When</th>
+            <th class="px-4 py-4 text-left">Source</th>
+            <th class="px-4 py-4 text-left">Client</th>
+            <th class="px-4 py-4 text-left">Provider</th>
+            <th class="px-4 py-4 text-left">Model</th>
+            <th class="px-4 py-4 text-left">Project</th>
+            <th class="px-4 py-4 text-right">Tokens</th>
+            <th class="px-4 py-4 text-right">Cost (api-eq.)</th>
+            <th class="px-4 py-4 text-left">Pricing</th>
+          </tr>
+        </thead>
+        <tbody id="audit-tbody" class="divide-y divide-mist dark:divide-slate">
+          <tr><td colspan="9" class="px-5 py-12 text-center text-stone italic">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Pagination -->
+  <div class="flex items-center justify-between text-xs text-stone">
+    <span id="page-info">—</span>
+    <div class="flex gap-2">
+      <button id="prev-page" class="border border-mist dark:border-slate rounded-md px-3 py-1.5 hover:text-ink dark:hover:text-paper hover:border-stone transition disabled:opacity-40 disabled:cursor-not-allowed">← Prev</button>
+      <button id="next-page" class="border border-mist dark:border-slate rounded-md px-3 py-1.5 hover:text-ink dark:hover:text-paper hover:border-stone transition disabled:opacity-40 disabled:cursor-not-allowed">Next →</button>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let auditState = { page: 1, per_page: 50, pages: 1, total: 0 };
+let debounceTimer = null;
+
+const fmtCurrency = n => '$' + (n || 0).toLocaleString('en-US', {maximumFractionDigits: (n && n < 1) ? 4 : 2});
+const fmtInt = n => (n || 0).toLocaleString('en-US');
+const fmtBig = n => {
+  n = n || 0;
+  if (n >= 1e9) return (n / 1e9).toFixed(2) + 'B';
+  if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
+  if (n >= 1e3) return (n / 1e3).toFixed(1) + 'k';
+  return String(n);
+};
+const fmtWhen = iso => {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (isNaN(d)) return iso;
+  return d.toLocaleString('en-GB', { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+};
+
+const PRICING_BADGE = {
+  exact: 'text-emerald-600 dark:text-emerald-500',
+  alias: 'text-ambre-600 dark:text-ambre-500',
+  fallback: 'text-rose-600 dark:text-rose-500',
+};
+
+function totalTokens(t) {
+  if (!t) return 0;
+  return (t.fresh_input || 0) + (t.cache_read || 0) + (t.cache_write_5m || 0) +
+         (t.cache_write_1h || 0) + (t.output_tokens || 0);
+}
+
+function tokenBreakdownHtml(t) {
+  if (!t) return '<span class="text-stone italic">no token breakdown</span>';
+  const rows = [
+    ['Fresh input ·100%', t.fresh_input],
+    ['Cache write 5m ·125%', t.cache_write_5m],
+    ['Cache write 1h ·125%', t.cache_write_1h],
+    ['Cache read ·10%', t.cache_read],
+    ['Output', t.output_tokens],
+    ['Thinking', t.thinking],
+    ['Reasoning', t.reasoning],
+    ['Web search', t.web_search_requests],
+    ['Web fetch', t.web_fetch_requests],
+  ];
+  return `<table class="text-xs w-full max-w-md">${rows.map(([k, v]) => `
+    <tr class="border-b border-mist/50 dark:border-slate/50">
+      <td class="py-1 pr-4 text-stone">${k}</td>
+      <td class="py-1 text-right font-numeric ${v ? '' : 'text-stone/50'}">${fmtInt(v || 0)}</td>
+    </tr>`).join('')}</table>`;
+}
+
+function renderRows(events) {
+  const tbody = document.getElementById('audit-tbody');
+  if (!events.length) {
+    tbody.innerHTML = '<tr><td colspan="9" class="px-5 py-12 text-center text-stone italic">No events match.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = events.map((e, i) => {
+    const tt = totalTokens(e.tokens);
+    const pq = e.pricing_quality || '—';
+    const pqClass = PRICING_BADGE[pq] || 'text-stone';
+    return `
+    <tr class="hover:bg-chalk dark:hover:bg-slate/30 transition cursor-pointer" data-row="${i}">
+      <td class="px-4 py-3 text-xs text-stone whitespace-nowrap">${fmtWhen(e.started_at)}</td>
+      <td class="px-4 py-3 text-xs"><span class="font-mono">${e.source}</span></td>
+      <td class="px-4 py-3 text-xs text-stone">${e.client || '—'}</td>
+      <td class="px-4 py-3 text-xs text-stone">${e.provider || '—'}</td>
+      <td class="px-4 py-3 text-xs font-mono text-ink dark:text-paper">${e.model || '<span class="text-stone italic">—</span>'}</td>
+      <td class="px-4 py-3 text-xs font-mono text-stone">${e.project ? window.anonymizeProjectId(e.project) : '<span class="italic">unclassified</span>'}</td>
+      <td class="px-4 py-3 text-right font-numeric text-xs">${tt ? fmtBig(tt) : '<span class="text-stone/50">—</span>'}</td>
+      <td class="px-4 py-3 text-right font-numeric text-xs">${e.cost_estimated ? fmtCurrency(e.cost_estimated) : '<span class="text-stone/50">—</span>'}</td>
+      <td class="px-4 py-3 text-xs"><span class="${pqClass}">${pq}</span></td>
+    </tr>
+    <tr class="hidden bg-chalk/60 dark:bg-slate/20" data-detail="${i}">
+      <td colspan="9" class="px-6 py-5">
+        <div class="grid md:grid-cols-2 gap-6">
+          <div>
+            <div class="text-[10px] uppercase tracking-[0.15em] text-stone mb-2">Token breakdown</div>
+            ${tokenBreakdownHtml(e.tokens)}
+          </div>
+          <div class="text-xs space-y-1.5 text-stone">
+            <div><span class="text-stone/70">event id</span> · <span class="font-mono">${e.id}</span></div>
+            <div><span class="text-stone/70">type</span> · ${e.event_type || '—'}</div>
+            <div><span class="text-stone/70">machine</span> · <span class="font-mono">${e.machine_id || '—'}</span></div>
+            <div><span class="text-stone/70">originator</span> · <span class="font-mono">${e.originator || '—'}</span></div>
+            <div><span class="text-stone/70">auth mode</span> · ${e.auth_mode || '—'}</div>
+            <div><span class="text-stone/70">model (raw)</span> · <span class="font-mono">${e.model_raw || '—'}</span></div>
+            <div><span class="text-stone/70">duration</span> · ${e.duration_sec || 0}s</div>
+            <div><span class="text-stone/70">usage_breakdown</span> · ${e.has_usage_breakdown ? 'yes' : '<span class="italic">none (hour-estimated / metadata-only event)</span>'}</div>
+          </div>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+
+  tbody.querySelectorAll('tr[data-row]').forEach(tr => {
+    tr.addEventListener('click', () => {
+      const d = tbody.querySelector(`tr[data-detail="${tr.dataset.row}"]`);
+      if (d) d.classList.toggle('hidden');
+    });
+  });
+}
+
+function fillSelect(id, items, current) {
+  const sel = document.getElementById(id);
+  const keep = sel.querySelector('option').outerHTML;
+  sel.innerHTML = keep + items.map(it =>
+    `<option value="${it.value}" ${it.value === current ? 'selected' : ''}>${it.value} (${it.count})</option>`
+  ).join('');
+}
+
+async function loadAudit() {
+  const days = window.getWindowDays();
+  document.getElementById('window-label').textContent = `Last ${days} days`;
+  const params = new URLSearchParams({
+    days,
+    page: auditState.page,
+    per_page: auditState.per_page,
+    q: document.getElementById('filter-q').value.trim(),
+    source: document.getElementById('filter-source').value,
+    provider: document.getElementById('filter-provider').value,
+    model: document.getElementById('filter-model').value,
+  });
+  const r = await fetch(`/api/audit?${params}`);
+  const data = await r.json();
+  auditState.pages = data.pages;
+  auditState.total = data.total;
+  auditState.page = data.page;
+
+  renderRows(data.events);
+  fillSelect('filter-source', data.facets.sources, document.getElementById('filter-source').value);
+  fillSelect('filter-provider', data.facets.providers, document.getElementById('filter-provider').value);
+  fillSelect('filter-model', data.facets.models, document.getElementById('filter-model').value);
+
+  document.getElementById('result-count').textContent = `${fmtInt(data.total)} event${data.total !== 1 ? 's' : ''}`;
+  document.getElementById('page-info').textContent =
+    `Page ${data.page} / ${data.pages} · ${fmtInt(data.total)} total`;
+  document.getElementById('prev-page').disabled = data.page <= 1;
+  document.getElementById('next-page').disabled = data.page >= data.pages;
+}
+
+function reloadFromFilters() {
+  auditState.page = 1;
+  loadAudit();
+}
+
+document.getElementById('filter-q').addEventListener('input', () => {
+  clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(reloadFromFilters, 250);
+});
+['filter-source', 'filter-provider', 'filter-model'].forEach(id =>
+  document.getElementById(id).addEventListener('change', reloadFromFilters));
+document.getElementById('prev-page').addEventListener('click', () => {
+  if (auditState.page > 1) { auditState.page--; loadAudit(); }
+});
+document.getElementById('next-page').addEventListener('click', () => {
+  if (auditState.page < auditState.pages) { auditState.page++; loadAudit(); }
+});
+
+async function reloadData() {
+  auditState.page = 1;
+  await loadAudit();
+}
+
+loadAudit();
+</script>
+{% endblock %}

@@ -87,6 +87,13 @@ ALLOWED_META_KEYS = {
     # Strings courtes categorielles
     "model", "mode", "auth_mode", "source_api", "tool_name",
     "extension", "extensions", "finish_reason", "is_seed_commit",
+    # Codex rollout client identity. Categorical enum sourced from the
+    # rollout `session_meta.originator` (e.g. "codex_desktop", "codex_exec",
+    # "codex-tui", "codex_sdk_ts"). Distinguishes the Codex client (app vs
+    # CLI) which otherwise all collapse into source='codex'. Safe: fixed
+    # enum, zero free-text, no path, no identifier. Opt-in surfaced in the
+    # audit log "Client" column.
+    "originator",
     # Provenance label that traces where the model id came from
     # ("macapp_log" | "logs_2_sqlite_join" | "unknown"). Safe — fixed
     # enum, never a path or identifier.

@@ -100,6 +100,14 @@ class TokenBreakdown:
 MODEL_ALIASES = {
     "gpt-5": "gpt-5",
     "gpt-5.5": "gpt-5.5",
+    # Versions précises observées dans turn_context.model des rollouts Codex
+    # 2026. Listées explicitement (mapping identité) pour que le match EXACT
+    # gagne avant le fallback substring — sinon `gpt-5.4`/`gpt-5.3-codex`
+    # contiennent le substring `gpt-5` et étaient rabattus sur le bucket
+    # générique `gpt-5`, masquant la version réellement détectée.
+    "gpt-5.4": "gpt-5.4",
+    "gpt-5.3-codex": "gpt-5.3-codex",
+    "gpt-5.3-codex-spark": "gpt-5.3-codex-spark",
     "gpt-5-codex": "gpt-5-codex",
     "gpt-5-mini": "gpt-5-mini",
     "gpt-5-nano": "gpt-5-nano",
@@ -110,9 +118,14 @@ MODEL_ALIASES = {
     "o1": "o1",
     "claude-opus-4-7": "claude-opus-4-7",
     "claude-sonnet-4-7": "claude-sonnet-4-7",
+    "claude-opus-4-8": "claude-opus-4-8",
     "claude-opus-4-6": "claude-opus-4-6",
     "claude-sonnet-4-6": "claude-sonnet-4-6",
     "claude-haiku-4-5": "claude-haiku-4-5",
+    # NB: doit rester APRÈS les versions plus précises (4-8/4-7/4-6) : le
+    # fallback substring prend l'alias le plus long, mais le match exact
+    # (claude-opus-4-8) gagne de toute façon. Sans l'entrée 4-8 ci-dessus,
+    # `claude-opus-4-8` était rabattu sur `claude-opus-4` (modèle plus ancien).
     "claude-opus-4": "claude-opus-4",
     "claude-sonnet-4": "claude-sonnet-4",
     "claude-opus-3-5": "claude-opus-3-5",

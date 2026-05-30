@@ -169,6 +169,52 @@ class TestDashboardSmoke(unittest.TestCase):
         self.assertIn("total_api_equivalent_cost", html)
         self.assertIn("not measured", html)
 
+    def test_audit_page_returns_200(self):
+        client = self._make_client()
+        r = client.get("/audit")
+        self.assertEqual(r.status_code, 200)
+        html = r.get_data(as_text=True)
+        self.assertIn("Audit log", html)
+        # Read-only / privacy framing must be visible.
+        self.assertIn("metadata only", html)
+
+    def test_api_audit_returns_valid_json(self):
+        client = self._make_client()
+        r = client.get("/api/audit?days=30")
+        self.assertEqual(r.status_code, 200)
+        data = r.get_json()
+        self.assertEqual(data["schema_version"], "ship1000x.dashboard.audit.v1")
+        for key in ("page", "per_page", "pages", "total", "events", "facets"):
+            self.assertIn(key, data)
+        # Both seeded codex events surface (git excluded, none here).
+        self.assertEqual(data["total"], 2)
+        self.assertEqual(len(data["events"]), 2)
+        ev = data["events"][0]
+        for key in ("id", "source", "client", "provider", "model",
+                    "tokens", "pricing_quality", "has_usage_breakdown"):
+            self.assertIn(key, ev)
+        # Facets reflect the seeded providers/sources.
+        sources = {f["value"] for f in data["facets"]["sources"]}
+        self.assertIn("codex", sources)
+
+    def test_api_audit_filters_by_source(self):
+        client = self._make_client()
+        r = client.get("/api/audit?days=30&source=codex_macapp")
+        data = r.get_json()
+        self.assertEqual(data["total"], 1)
+        self.assertEqual(data["events"][0]["source"], "codex_macapp")
+
+    def test_api_audit_never_exposes_content_keys(self):
+        client = self._make_client()
+        data = client.get("/api/audit?days=30").get_json()
+        forbidden = {"content", "text", "message", "prompt", "response",
+                     "diff", "command", "input", "output"}
+        for ev in data["events"]:
+            blob = json.dumps(ev)
+            ub = ev.get("usage_breakdown") or {}
+            for k in forbidden:
+                self.assertNotIn(k, ub)
+
     def test_overview_excludes_estimative_blocks(self):
         client = self._make_client()
         html = client.get("/").get_data(as_text=True)

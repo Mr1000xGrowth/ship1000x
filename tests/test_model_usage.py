@@ -62,13 +62,28 @@ class TestModelUsageRollup(unittest.TestCase):
 
     def test_unknown_model_flagged_fallback(self):
         b = _breakdown("openai", fresh_input=500)
-        self._insert("e3", "2026-05-21", "codex", "codex-auto-review", "openai", b, 0.5)
+        self._insert("e3", "2026-05-21", "codex", "totally-unknown-model", "openai", b, 0.5)
+        rebuild_model_usage(self.storage, since=None)
+        with self.storage.conn() as c:
+            r = c.execute(
+                "SELECT pricing_quality FROM daily_model_usage WHERE model='totally-unknown-model'"
+            ).fetchone()
+        self.assertEqual(r["pricing_quality"], "fallback")
+
+    def test_codex_auto_review_priced_as_gpt5(self):
+        # codex-auto-review = label interne SHIP de la passe de revue auto de
+        # Codex (pas un modèle OpenAI publié). Mappé aux tarifs gpt-5 plutôt
+        # que de retomber sur DEFAULT_PRICING (Sonnet-like, sur-estimait un
+        # travail OpenAI). On vérifie que la résolution est "exact" et non
+        # "fallback".
+        b = _breakdown("openai", fresh_input=500)
+        self._insert("e3b", "2026-05-21", "codex", "codex-auto-review", "openai", b, 0.5)
         rebuild_model_usage(self.storage, since=None)
         with self.storage.conn() as c:
             r = c.execute(
                 "SELECT pricing_quality FROM daily_model_usage WHERE model='codex-auto-review'"
             ).fetchone()
-        self.assertEqual(r["pricing_quality"], "fallback")
+        self.assertEqual(r["pricing_quality"], "exact")
 
     def test_distinct_models_separate_rows(self):
         self._insert("e4", "2026-05-22", "claude_code", "claude-opus-4-7", "anthropic",

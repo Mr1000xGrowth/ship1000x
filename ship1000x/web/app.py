@@ -23,8 +23,51 @@ from ship1000x.core.cost_truth import (
     event_cost_truth,
     safe_raw_meta,
 )
-from ship1000x.core.pricing import pricing_freshness
+from ship1000x.core.pricing import pricing_freshness, resolve_model_pricing
+from ship1000x.core.usage import canonicalize_model
 from ship1000x.core.usage import format_token_count as _fmt_tok
+
+
+# Client (app vs CLI) derivation for the audit log. For Claude the client is
+# already distinguishable from `source`; for Codex everything collapses into
+# source='codex' and only the rollout `originator` (opt-in, allowlisted) tells
+# Desktop from CLI apart.
+_ORIGINATOR_LABELS = {
+    "codex_desktop": "Desktop",
+    "Codex Desktop": "Desktop",
+    "codex_exec": "CLI · exec",
+    "codex-tui": "CLI · tui",
+    "codex_tui": "CLI · tui",
+    "codex_sdk_ts": "SDK",
+    "codex_sdk": "SDK",
+}
+_SOURCE_CLIENT_LABELS = {
+    "claude_code": "CLI",
+    "claude_desktop": "Desktop",
+    "anthropic_usage": "Usage API",
+    "openai_usage": "Usage API",
+    "codex_macapp": "Desktop (macapp)",
+    "codex_desktop": "Desktop (SSE)",
+    "cursor": "Cursor",
+    "cline": "Cline",
+}
+
+
+def _audit_client(source: str, originator: str | None) -> str:
+    """Human label for the client that produced an event (app vs CLI)."""
+    if source == "codex" and originator:
+        return _ORIGINATOR_LABELS.get(originator, originator)
+    return _SOURCE_CLIENT_LABELS.get(source, "—")
+
+
+def _infer_audit_provider(source: str, model: str) -> str:
+    """Best-effort provider from source + model when raw_meta omits it."""
+    m = (model or "").lower()
+    if "codex" in source or m.startswith(("gpt", "o1", "o3", "o4")):
+        return "openai"
+    if "claude" in source or "anthropic" in source or m.startswith("claude"):
+        return "anthropic"
+    return "anthropic"
 
 
 def _cost_presentation(
@@ -161,6 +204,10 @@ def create_app(db_path: Path, config_dir: Path) -> Flask:
     @app.route("/estimate")
     def estimate_page():
         return render_template("estimate.html")
+
+    @app.route("/audit")
+    def audit_page():
+        return render_template("audit.html")
 
     # ─── API endpoints ─────────────────────────────────────────────────
 
@@ -329,8 +376,18 @@ def create_app(db_path: Path, config_dir: Path) -> Flask:
             key = (r["provider"], r["model"])
             m = by_model.get(key)
             if m is None:
+                # Display-only relabel : le `gpt-5` nu = orphelins legacy Codex
+                # (events ingérés avant que turn_context.model fonctionne ;
+                # rollouts sources rotés → version réelle irrécupérable). Les
+                # données fraîches résolvent toujours une version précise
+                # (gpt-5.5/5.4/5.3-codex). On ne devine pas : on le signale.
+                # La donnée stockée reste `gpt-5` ; seul l'affichage change.
+                model_display = r["model"]
+                if r["provider"] == "openai" and r["model"] == "gpt-5":
+                    model_display = "gpt-5 (version non détectée)"
                 m = {
                     "provider": r["provider"], "model": r["model"],
+                    "model_display": model_display,
                     "tokens": {f: 0 for f in tok_fields},
                     "cost_api_equivalent": 0.0, "cost_billed": 0.0,
                     "pricing_quality": r["pricing_quality"],
@@ -525,6 +582,148 @@ def create_app(db_path: Path, config_dir: Path) -> Flask:
         from ship1000x.core.source_quality import build_source_quality_report
 
         return jsonify(build_source_quality_report(storage, window_days=days))
+
+    @app.route("/api/audit")
+    def api_audit():
+        """Audit log : 1 ligne = 1 event, le détail le plus profond traçable.
+
+        Read-only. Source de vérité brute pour réconcilier l'Overview :
+        chaque event expose son modèle précis (re-canonicalisé), son client
+        (app vs CLI via originator), son usage_breakdown intégral, et la
+        qualité du tarif appliqué. On ne stocke ni n'expose aucun contenu —
+        uniquement des métadonnées déjà sanitizées en DB.
+        """
+        days = int(request.args.get("days", 30))
+        page = max(1, int(request.args.get("page", 1)))
+        per_page = min(200, max(10, int(request.args.get("per_page", 50))))
+        f_source = (request.args.get("source") or "").strip()
+        f_provider = (request.args.get("provider") or "").strip()
+        f_model = (request.args.get("model") or "").strip()
+        f_project = (request.args.get("project") or "").strip()
+        f_q = (request.args.get("q") or "").strip().lower()
+
+        tok_fields = (
+            "fresh_input", "cache_read", "cache_write_5m", "cache_write_1h",
+            "output_tokens", "thinking", "reasoning",
+            "web_search_requests", "web_fetch_requests",
+        )
+
+        with storage.conn() as conn:
+            rows = conn.execute(
+                """SELECT id, source, event_type, started_at, duration_sec,
+                          project_id, cost_estimated, machine_id, raw_meta
+                   FROM events
+                   WHERE source != 'git'
+                     AND started_at IS NOT NULL
+                     AND date(started_at) >= date('now', ? || ' days')
+                   ORDER BY started_at DESC""",
+                (f"-{days}",),
+            ).fetchall()
+
+        events: list[dict] = []
+        sources_seen: dict[str, int] = {}
+        providers_seen: dict[str, int] = {}
+        models_seen: dict[str, int] = {}
+
+        for r in rows:
+            meta = safe_raw_meta(r["raw_meta"])
+            usage = meta.get("usage") if isinstance(meta.get("usage"), dict) else {}
+            ub = meta.get("usage_breakdown") if isinstance(meta.get("usage_breakdown"), dict) else {}
+            originator = meta.get("originator") or None
+
+            raw_model = meta.get("model") or usage.get("model_canonical")
+            model = canonicalize_model(raw_model) if raw_model else None
+            provider = (
+                (ub.get("provider") if isinstance(ub, dict) else None)
+                or usage.get("provider")
+                or _infer_audit_provider(r["source"], model or "")
+            )
+            client = _audit_client(r["source"], originator)
+            auth_mode = usage.get("auth_mode") or meta.get("auth_mode")
+
+            # Qualité du tarif appliqué pour CE modèle précis.
+            if model:
+                pr = resolve_model_pricing(provider, model)
+                pricing_quality = "exact" if pr.match_quality == "exact" else (
+                    "fallback" if pr.unknown_model else pr.match_quality
+                )
+            else:
+                pricing_quality = None
+
+            tokens = {f: int(ub.get(f, 0) or 0) for f in tok_fields} if ub else {f: 0 for f in tok_fields}
+            has_ub = bool(ub)
+
+            # Filtres serveur (provider/model/client dérivés de raw_meta).
+            if f_source and r["source"] != f_source:
+                continue
+            if f_provider and provider != f_provider:
+                continue
+            if f_model and (model or "") != f_model:
+                continue
+            if f_project and (r["project_id"] or "") != f_project:
+                continue
+            if f_q:
+                hay = " ".join(str(x) for x in (
+                    r["source"], provider, model, client, r["project_id"], auth_mode,
+                )).lower()
+                if f_q not in hay:
+                    continue
+
+            sources_seen[r["source"]] = sources_seen.get(r["source"], 0) + 1
+            if provider:
+                providers_seen[provider] = providers_seen.get(provider, 0) + 1
+            if model:
+                models_seen[model] = models_seen.get(model, 0) + 1
+
+            events.append({
+                "schema_version": "ship1000x.dashboard.audit_event.v1",
+                "id": r["id"],
+                "started_at": r["started_at"],
+                "event_type": r["event_type"],
+                "source": r["source"],
+                "client": client,
+                "originator": originator,
+                "provider": provider,
+                "model": model,
+                "model_raw": raw_model,
+                "project": r["project_id"],
+                "machine_id": r["machine_id"],
+                "duration_sec": r["duration_sec"] or 0,
+                "auth_mode": auth_mode,
+                "cost_estimated": round(r["cost_estimated"] or 0.0, 6),
+                "pricing_quality": pricing_quality,
+                "has_usage_breakdown": has_ub,
+                "tokens": tokens,
+                "usage_breakdown": ub or None,
+            })
+
+        total = len(events)
+        pages = max(1, (total + per_page - 1) // per_page)
+        page = min(page, pages)
+        start = (page - 1) * per_page
+        page_events = events[start:start + per_page]
+
+        def _facet(d: dict[str, int]) -> list[dict]:
+            return [
+                {"value": k, "count": v}
+                for k, v in sorted(d.items(), key=lambda kv: -kv[1])
+            ]
+
+        return jsonify({
+            "schema_version": "ship1000x.dashboard.audit.v1",
+            "window_days": days,
+            "page": page,
+            "per_page": per_page,
+            "pages": pages,
+            "total": total,
+            "events": page_events,
+            "facets": {
+                "sources": _facet(sources_seen),
+                "providers": _facet(providers_seen),
+                "models": _facet(models_seen),
+            },
+            "note": "Read-only audit base. Metadata only — never any content.",
+        })
 
     return app
 

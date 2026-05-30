@@ -15,6 +15,7 @@ from typing import Any
 
 from ship1000x.core.pricing import PRICING_VERSION, resolve_model_pricing
 from ship1000x.core.storage import Storage
+from ship1000x.core.usage import canonicalize_model
 
 # Champs tokens agrégés (sous-ensemble numérique du superset).
 _TOKEN_FIELDS = (
@@ -79,7 +80,14 @@ def rebuild_model_usage(storage: Storage, since: datetime | None = None) -> dict
         if not isinstance(ub, dict):
             continue
         usage = m.get("usage") or {}
-        model = usage.get("model_canonical") or m.get("model") or "unknown"
+        # Re-dériver le canonical depuis le modèle PRÉCIS (turn_context.model
+        # côté Codex, model côté Claude) plutôt que de faire confiance au
+        # `model_canonical` figé à l'ingest : ce dernier rabattait gpt-5.4 /
+        # gpt-5.3-codex / claude-opus-4-8 sur des buckets génériques plus
+        # anciens (gpt-5 / claude-opus-4). On re-canonicalise ici pour que les
+        # versions réellement détectées apparaissent en lignes distinctes.
+        raw_model = m.get("model") or usage.get("model_canonical")
+        model = canonicalize_model(raw_model)
         provider = _infer_provider(r["source"], model, usage)
         key = (r["day"], r["machine_id"] or "unknown-machine", r["source"], model)
         a = agg.get(key)

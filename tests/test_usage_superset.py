@@ -19,7 +19,7 @@ import json
 from pathlib import Path
 
 from ship1000x.collectors.claude_code import parse_session_file
-from ship1000x.core.usage import format_token_count
+from ship1000x.core.usage import canonicalize_model, format_token_count
 
 
 def test_format_token_count_adaptive_units():
@@ -28,6 +28,24 @@ def test_format_token_count_adaptive_units():
     assert format_token_count(1234) == "1 k"
     assert format_token_count(2_300_000) == "2.3 M"
     assert format_token_count(1_500_000_000) == "1.50 Md"
+
+
+def test_precise_versions_not_flattened_to_generic():
+    """Régression : les versions précises observées (turn_context.model Codex,
+    model Claude) NE doivent PAS être rabattues sur un bucket générique plus
+    ancien par le fallback substring. Sinon l'usage réel d'un modèle détecté
+    devient invisible (fusionné dans gpt-5 / claude-opus-4)."""
+    # OpenAI / Codex 2026
+    assert canonicalize_model("gpt-5.4") == "gpt-5.4"
+    assert canonicalize_model("gpt-5.3-codex") == "gpt-5.3-codex"
+    assert canonicalize_model("gpt-5.3-codex-spark") == "gpt-5.3-codex-spark"
+    assert canonicalize_model("gpt-5.5") == "gpt-5.5"
+    # Le vrai legacy générique reste gpt-5
+    assert canonicalize_model("gpt-5") == "gpt-5"
+    # Anthropic : la version la plus récente ne doit pas devenir l'ancienne
+    assert canonicalize_model("claude-opus-4-8") == "claude-opus-4-8"
+    assert canonicalize_model("claude-opus-4-8[1m]") == "claude-opus-4-8"
+    assert canonicalize_model("claude-opus-4") == "claude-opus-4"
 
 
 def _write_jsonl(path: Path, records: list[dict]) -> None:

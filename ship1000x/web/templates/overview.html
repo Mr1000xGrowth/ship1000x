@@ -123,8 +123,10 @@
           <thead>
             <tr class="text-[11px] uppercase tracking-[0.1em] text-stone border-b border-mist dark:border-slate">
               <th class="text-left py-2 font-medium">Model</th>
-              <th class="text-right py-2 font-medium">Cache read</th>
-              <th class="text-right py-2 font-medium">Output</th>
+              <th class="text-right py-2 font-medium" title="Contenu envoyé pour la 1re fois, jamais caché — facturé 100% du tarif input">Fresh <span class="text-mist dark:text-slate normal-case">·100%</span></th>
+              <th class="text-right py-2 font-medium" title="1re mise en cache du contexte — le token le PLUS cher, facturé 125% du tarif input">Cache write <span class="text-clay normal-case">·125%</span></th>
+              <th class="text-right py-2 font-medium" title="Relectures du même contenu déjà caché — le moins cher, ~10% du tarif input">Cache read <span class="text-sage normal-case">·10%</span></th>
+              <th class="text-right py-2 font-medium" title="Réponse du modèle (inclut reasoning/thinking) — tarif output le plus élevé">Output</th>
               <th class="text-right py-2 font-medium">API-equiv $</th>
               <th class="text-right py-2 pl-3 font-medium hidden sm:table-cell">Trend (period)</th>
               <th class="text-left py-2 pl-3 font-medium">Pricing</th>
@@ -133,6 +135,14 @@
           <tbody id="cm-rows" class="font-numeric"></tbody>
         </table>
       </div>
+      <p class="text-xs text-stone italic pl-1">
+        ℹ Décomposé par <span class="font-medium">palier de tarif</span>, du plus cher au moins cher :
+        <span class="font-medium">Cache write</span> (125% — 1re mise en cache de vos docs/contexte, le token le + cher) ›
+        <span class="font-medium">Fresh</span> (100% — input jamais caché) ›
+        <span class="font-medium">Cache read</span> (~10% — relectures du contenu déjà caché, le - cher).
+        Avec le prompt caching, le « fresh » seul est minuscule : la majorité de l'input passe par
+        <span class="font-medium">write puis read</span> — d'où l'intérêt de les voir séparément.
+      </p>
       <p class="text-xs text-stone italic" id="cm-pricing-note">—</p>
     </div>
   </section>
@@ -538,7 +548,7 @@ async function loadCostModels(days) {
       || (m.tokens.output_tokens || 0) > 0);
     if (!visible.length) {
       const tr = document.createElement('tr');
-      tr.innerHTML = '<td colspan="6" class="py-4 text-center text-stone italic">No model usage in this window.</td>';
+      tr.innerHTML = '<td colspan="8" class="py-4 text-center text-stone italic">No model usage in this window.</td>';
       tbody.appendChild(tr);
     }
     visible.forEach(m => {
@@ -548,7 +558,9 @@ async function loadCostModels(days) {
         ? '<span class="text-sage">✓ exact</span>'
         : '<span class="text-clay">⚠ fallback</span>';
       tr.innerHTML =
-        `<td class="py-2 text-ink dark:text-paper">${m.provider} / ${m.model}</td>` +
+        `<td class="py-2 text-ink dark:text-paper">${m.provider} / ${m.model_display || m.model}</td>` +
+        `<td class="py-2 text-right text-stone">${fmtBig(m.tokens.fresh_input||0)}</td>` +
+        `<td class="py-2 text-right text-stone">${fmtBig((m.tokens.cache_write_5m||0)+(m.tokens.cache_write_1h||0))}</td>` +
         `<td class="py-2 text-right text-stone">${fmtBig(m.tokens.cache_read)}</td>` +
         `<td class="py-2 text-right text-stone">${fmtBig(m.tokens.output_tokens)}</td>` +
         `<td class="py-2 text-right text-ink dark:text-paper">${fmtCurrency(m.cost_api_equivalent)}</td>` +

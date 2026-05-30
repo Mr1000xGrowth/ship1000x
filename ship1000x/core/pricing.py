@@ -59,6 +59,7 @@ ANTHROPIC_PRICING = {
     "claude-opus-4-7": {"input": 15.0, "output": 75.0, "cache_read": 1.50, "cache_write": 18.75},
     "claude-sonnet-4-7": {"input": 3.0, "output": 15.0, "cache_read": 0.30, "cache_write": 3.75},
     # Claude 4.6 family (2025-2026)
+    "claude-opus-4-8": {"input": 15.0, "output": 75.0, "cache_read": 1.50, "cache_write": 18.75},
     "claude-opus-4-6": {"input": 15.0, "output": 75.0, "cache_read": 1.50, "cache_write": 18.75},
     "claude-sonnet-4-6": {"input": 3.0, "output": 15.0, "cache_read": 0.30, "cache_write": 3.75},
     "claude-haiku-4-5": {"input": 0.80, "output": 4.0, "cache_read": 0.08, "cache_write": 1.0},
@@ -84,7 +85,20 @@ OPENAI_PRICING = {
     # pricing match quality stays "exact" instead of relying on the substring
     # alias path (gpt-5 in gpt-5.5).
     "gpt-5.5": {"input": 1.25, "output": 10.0, "cached_input": 0.125},
+    # Versions précises Codex 2026 (turn_context.model). Même famille tarifaire
+    # que gpt-5 ; listées explicitement pour un match "exact" plutôt qu'un
+    # alias substring vers gpt-5 (qui marquait la ligne en fallback).
+    "gpt-5.4": {"input": 1.25, "output": 10.0, "cached_input": 0.125},
+    "gpt-5.3-codex": {"input": 1.25, "output": 10.0, "cached_input": 0.125},
+    "gpt-5.3-codex-spark": {"input": 1.25, "output": 10.0, "cached_input": 0.125},
     "gpt-5-codex": {"input": 1.25, "output": 10.0, "cached_input": 0.125},
+    # codex-auto-review n'est PAS un modèle OpenAI publié : c'est le label
+    # interne SHIP de la passe de revue automatique de Codex. Elle tourne sur
+    # la famille gpt-5 (Codex) → on la facture aux tarifs gpt-5 plutôt que de
+    # retomber sur DEFAULT_PRICING (3.0/15.0, Sonnet-like) qui sur-estimait un
+    # travail OpenAI. On ne devine pas un tarif : on applique celui de la
+    # famille de modèles réellement utilisée par l'opération.
+    "codex-auto-review": {"input": 1.25, "output": 10.0, "cached_input": 0.125},
     "gpt-5-mini": {"input": 0.25, "output": 2.0, "cached_input": 0.025},
     "gpt-5-nano": {"input": 0.05, "output": 0.40, "cached_input": 0.005},
     # Legacy pre-2026
