@@ -60,6 +60,83 @@ def _audit_client(source: str, originator: str | None) -> str:
     return _SOURCE_CLIENT_LABELS.get(source, "—")
 
 
+# Human label for the *nature* of an audited event. Ship aggregates one event
+# per session (or per session-day), so a row is a whole run, not a single API
+# call — the label says so explicitly and the activity counters below break it
+# down (how many user prompts, tool calls, assistant turns…).
+_EVENT_NATURE = {
+    "session": "Run complet · session",
+    "session_day": "Run complet · journée",
+    "session_metadata": "Métadonnée de session",
+    "billing_snapshot": "Snapshot de facturation",
+    "usage_snapshot": "Snapshot d'usage",
+}
+
+
+def _audit_activity(meta: dict) -> dict:
+    """Extract a what-happened breakdown from already-sanitized metadata.
+
+    Pure counters (user prompts by type, tool calls, assistant turns, compacts)
+    — never any content. Answers "was it a prompt, a tool call, a full run?".
+    """
+    umc = meta.get("user_msg_counts") if isinstance(meta.get("user_msg_counts"), dict) else {}
+    return {
+        "user_typed": int(umc.get("typed", 0) or 0),
+        "user_pastes": int(umc.get("paste", 0) or 0),
+        "tool_results": int(umc.get("tool_result", 0) or 0),
+        "approvals": int(umc.get("approval", 0) or 0),
+        "assistant_turns": int(meta.get("assistant_turns", 0) or 0),
+        "tool_calls": int(meta.get("tool_calls", meta.get("tool_call_count", 0)) or 0),
+        "turns": int(meta.get("turn_count", 0) or 0),
+        "compacts": int(meta.get("compact_count", 0) or 0),
+    }
+
+
+def _audit_tool_breakdown(meta: dict) -> list[dict]:
+    """Per-tool-name call counts ({"Bash": 12, ...}) → sorted list.
+
+    Categorical tool names only (Bash/Read/Edit, shell/apply_patch…) plus a
+    call count. Never any tool argument, command, path or output — those are
+    forbidden upstream and never reach the metadata.
+    """
+    tb = meta.get("tool_breakdown")
+    if not isinstance(tb, dict) or not tb:
+        return []
+    out = []
+    for name, count in tb.items():
+        try:
+            n = int(count or 0)
+        except (TypeError, ValueError):
+            n = 0
+        if n > 0 and isinstance(name, str) and name:
+            out.append({"name": name, "count": n})
+    out.sort(key=lambda x: (-x["count"], x["name"]))
+    return out
+
+
+def _audit_model_stats(meta: dict) -> list[dict]:
+    """Per-model token/cost/turn split → sorted list (canonical model names)."""
+    ms = meta.get("model_stats")
+    if not isinstance(ms, dict) or not ms:
+        return []
+    out = []
+    for raw_model, s in ms.items():
+        if not isinstance(s, dict):
+            continue
+        out.append({
+            "model": canonicalize_model(raw_model) or str(raw_model),
+            "model_raw": str(raw_model),
+            "tokens_in": int(s.get("tokens_in", 0) or 0),
+            "tokens_out": int(s.get("tokens_out", 0) or 0),
+            "cache_read_tokens": int(s.get("cache_read_tokens", 0) or 0),
+            "cache_write_tokens": int(s.get("cache_write_tokens", 0) or 0),
+            "cost": round(float(s.get("cost", 0.0) or 0.0), 6),
+            "turns": int(s.get("turns", 0) or 0),
+        })
+    out.sort(key=lambda x: (-(x["tokens_in"] + x["tokens_out"]), x["model"]))
+    return out
+
+
 def _infer_audit_provider(source: str, model: str) -> str:
     """Best-effort provider from source + model when raw_meta omits it."""
     m = (model or "").lower()
@@ -656,8 +733,9 @@ def create_app(db_path: Path, config_dir: Path) -> Flask:
 
         with storage.conn() as conn:
             rows = conn.execute(
-                """SELECT id, source, event_type, started_at, duration_sec,
-                          project_id, cost_estimated, machine_id, raw_meta
+                """SELECT id, source, event_type, started_at, ended_at,
+                          duration_sec, wall_clock_sec, project_id,
+                          cost_estimated, machine_id, raw_meta
                    FROM events
                    WHERE source != 'git'
                      AND started_at IS NOT NULL
@@ -725,7 +803,9 @@ def create_app(db_path: Path, config_dir: Path) -> Flask:
                 "schema_version": "ship1000x.dashboard.audit_event.v1",
                 "id": r["id"],
                 "started_at": r["started_at"],
+                "ended_at": r["ended_at"],
                 "event_type": r["event_type"],
+                "nature": _EVENT_NATURE.get(r["event_type"], r["event_type"]),
                 "source": r["source"],
                 "client": client,
                 "originator": originator,
@@ -735,6 +815,10 @@ def create_app(db_path: Path, config_dir: Path) -> Flask:
                 "project": r["project_id"],
                 "machine_id": r["machine_id"],
                 "duration_sec": r["duration_sec"] or 0,
+                "wall_clock_sec": r["wall_clock_sec"] or 0,
+                "activity": _audit_activity(meta),
+                "tool_breakdown": _audit_tool_breakdown(meta),
+                "model_stats": _audit_model_stats(meta),
                 "auth_mode": auth_mode,
                 "cost_estimated": round(r["cost_estimated"] or 0.0, 6),
                 "pricing_quality": pricing_quality,

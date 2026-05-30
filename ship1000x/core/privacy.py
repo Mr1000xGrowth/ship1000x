@@ -114,6 +114,12 @@ ALLOWED_META_KEYS = {
     "entrypoint",
     # Structures agregees (timeline, stats par modele, ratios)
     "model_stats", "event_timeline", "tool_calls", "split_ratio",
+    # Breakdown par NOM de tool ({"Bash": 12, "Read": 30, ...}). Categorique
+    # pur : uniquement les noms d'outils (enum-like, ex. Bash/Read/Edit cote
+    # Claude Code, shell/apply_patch cote Codex) + un compteur d'appels. JAMAIS
+    # les arguments, le contenu de la commande, les paths ou la sortie de
+    # l'outil (ceux-la restent dans FORBIDDEN_META_KEYS / non collectes).
+    "tool_breakdown",
     # Usage/cost quality metadata (safe structured counters only)
     "usage",
     # Superset normalise des tokens cross-provider (capture exhaustive).

@@ -126,6 +126,10 @@ def parse_session_file(path: Path) -> dict[str, Any]:
     model = ""
     user_msg_counts = {"typed": 0, "approval": 0, "tool_result": 0, "system": 0}
     tool_call_count = 0
+    # V7 tool breakdown : nombre d'appels par NOM de fonction-outil
+    # (ex. "shell", "apply_patch", "update_plan"). Categorique uniquement —
+    # jamais les arguments / la commande / la sortie.
+    tool_breakdown: dict[str, int] = {}
 
     try:
         with path.open("r", encoding="utf-8") as f:
@@ -199,6 +203,11 @@ def parse_session_file(path: Path) -> dict[str, Any]:
                     elif p_type == "function_call":
                         tool_call_count += 1
                         tool_paths.extend(_extract_tool_paths_codex(payload))
+                        # V7 : compteur par nom de fonction-outil (categorique).
+                        fname = payload.get("name")
+                        if isinstance(fname, str) and fname.strip():
+                            fname = fname.strip()
+                            tool_breakdown[fname] = tool_breakdown.get(fname, 0) + 1
                         if ts:
                             tool_events_ts.append(ts)
 
@@ -338,6 +347,7 @@ def parse_session_file(path: Path) -> dict[str, Any]:
         "wall_clock_sec": wall_clock_sec,
         "tool_paths": tool_paths,
         "tool_call_count": tool_call_count,
+        "tool_breakdown": tool_breakdown,
         "tokens_input": tokens_in,
         "tokens_output": tokens_out,
         "cached_input_tokens": cached_input,
@@ -430,6 +440,8 @@ def collect(storage, classifier, privacy_config: dict[str, Any]) -> dict[str, in
             "raw_meta": json.dumps({
                 "user_msg_counts": parsed["user_msg_counts"],
                 "tool_calls": parsed["tool_call_count"],
+                # V7 : breakdown par nom de fonction-outil (categorique).
+                "tool_breakdown": parsed.get("tool_breakdown", {}),
                 "model": parsed.get("model", ""),
                 # Client Codex (Desktop/CLI-exec/CLI-tui/SDK). Enum catégoriel
                 # autorisé par l'allowlist privacy → surfacé en colonne « Client »

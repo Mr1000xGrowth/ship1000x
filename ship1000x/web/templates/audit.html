@@ -89,6 +89,50 @@ const fmtWhen = iso => {
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => (
   {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
+const fmtDur = sec => {
+  sec = Math.round(sec || 0);
+  if (!sec) return '—';
+  if (sec < 60) return sec + 's';
+  const m = Math.floor(sec / 60), s = sec % 60;
+  if (m < 60) return s ? `${m}m ${s}s` : `${m}m`;
+  const h = Math.floor(m / 60);
+  return `${h}h ${m % 60}m`;
+};
+
+// Project cell : short slug only (last path segment), full id on hover, and a
+// clickable GitHub link when the id is a github.com/... path. Respects demo
+// mode — when anonymized, show the alias with no link.
+function renderProject(pid) {
+  if (!pid) return '<span class="italic text-stone">unclassified</span>';
+  const demoOn = document.body.classList.contains('demo');
+  if (demoOn) {
+    return `<span class="font-mono">${esc(window.anonymizeProjectId(pid))}</span>`;
+  }
+  const clean = String(pid).replace(/\/+$/, '');
+  const slug = clean.split('/').pop() || clean;
+  const href = pid.startsWith('github.com/') ? 'https://' + pid : null;
+  if (href) {
+    return `<a href="${esc(href)}" target="_blank" rel="noopener"
+              title="${esc(pid)}"
+              class="font-mono text-ink dark:text-paper hover:text-ambre-500 underline decoration-dotted underline-offset-2">${esc(slug)}</a>`;
+  }
+  return `<span class="font-mono" title="${esc(pid)}">${esc(slug)}</span>`;
+}
+
+function activitySummary(a) {
+  if (!a) return [];
+  return [
+    ['User prompts (typed)', a.user_typed],
+    ['User pastes', a.user_pastes],
+    ['Tool results returned', a.tool_results],
+    ['Approvals', a.approvals],
+    ['Assistant turns', a.assistant_turns],
+    ['Tool calls', a.tool_calls],
+    ['Turns', a.turns],
+    ['Compactions', a.compacts],
+  ].filter(([, v]) => v > 0);
+}
+
 const PRICING_BADGE = {
   exact: 'text-emerald-600 dark:text-emerald-500',
   alias: 'text-ambre-600 dark:text-ambre-500',
@@ -121,6 +165,49 @@ function tokenBreakdownHtml(t) {
     </tr>`).join('')}</table>`;
 }
 
+function toolBreakdownHtml(tb) {
+  if (!tb || !tb.length) return '';
+  const total = tb.reduce((s, t) => s + (t.count || 0), 0);
+  const rows = tb.map(t => `
+    <tr class="border-b border-mist/50 dark:border-slate/50">
+      <td class="py-1 pr-4 font-mono text-ink dark:text-paper">${esc(t.name)}</td>
+      <td class="py-1 text-right font-numeric">${fmtInt(t.count)}</td>
+    </tr>`).join('');
+  return `
+    <div class="mt-3">
+      <div class="text-[10px] uppercase tracking-[0.15em] text-stone mb-1">Tools called · ${fmtInt(total)}</div>
+      <table class="text-xs w-full max-w-xs">${rows}</table>
+    </div>`;
+}
+
+function modelStatsHtml(ms) {
+  if (!ms || !ms.length) return '';
+  const rows = ms.map(m => `
+    <tr class="border-b border-mist/50 dark:border-slate/50">
+      <td class="py-1 pr-3 font-mono text-ink dark:text-paper">${esc(m.model)}</td>
+      <td class="py-1 px-2 text-right font-numeric">${fmtBig(m.tokens_in || 0)}</td>
+      <td class="py-1 px-2 text-right font-numeric">${fmtBig(m.tokens_out || 0)}</td>
+      <td class="py-1 px-2 text-right font-numeric">${fmtInt(m.turns || 0)}</td>
+      <td class="py-1 pl-2 text-right font-numeric">${m.cost ? fmtCurrency(m.cost) : '<span class="text-stone/50">—</span>'}</td>
+    </tr>`).join('');
+  return `
+    <div class="mt-4">
+      <div class="text-[10px] uppercase tracking-[0.15em] text-stone mb-2">Per-model split</div>
+      <table class="text-xs w-full max-w-md">
+        <thead>
+          <tr class="text-stone/70 text-[10px] uppercase tracking-wider">
+            <td class="py-1 pr-3 text-left">Model</td>
+            <td class="py-1 px-2 text-right">In</td>
+            <td class="py-1 px-2 text-right">Out</td>
+            <td class="py-1 px-2 text-right">Turns</td>
+            <td class="py-1 pl-2 text-right">Cost·API</td>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+}
+
 function renderRows(events) {
   const tbody = document.getElementById('audit-tbody');
   if (!events.length) {
@@ -138,26 +225,51 @@ function renderRows(events) {
       <td class="px-4 py-3 text-xs text-stone">${esc(e.client) || '—'}</td>
       <td class="px-4 py-3 text-xs text-stone">${esc(e.provider) || '—'}</td>
       <td class="px-4 py-3 text-xs font-mono text-ink dark:text-paper">${e.model ? esc(e.model) : '<span class="text-stone italic">—</span>'}</td>
-      <td class="px-4 py-3 text-xs font-mono text-stone">${e.project ? esc(window.anonymizeProjectId(e.project)) : '<span class="italic">unclassified</span>'}</td>
+      <td class="px-4 py-3 text-xs">${renderProject(e.project)}</td>
       <td class="px-4 py-3 text-right font-numeric text-xs">${tt ? fmtBig(tt) : '<span class="text-stone/50">—</span>'}</td>
       <td class="px-4 py-3 text-right font-numeric text-xs">${e.cost_estimated ? fmtCurrency(e.cost_estimated) : '<span class="text-stone/50">—</span>'}</td>
       <td class="px-4 py-3 text-xs"><span class="${pqClass}">${pq}</span></td>
     </tr>
     <tr class="hidden bg-chalk/60 dark:bg-slate/20" data-detail="${i}">
       <td colspan="9" class="px-6 py-5">
-        <div class="grid md:grid-cols-2 gap-6">
+        <div class="grid md:grid-cols-3 gap-8">
+          <!-- What happened -->
+          <div class="space-y-3">
+            <div class="text-[10px] uppercase tracking-[0.15em] text-stone">What happened</div>
+            <div class="text-sm font-medium text-ink dark:text-paper">${esc(e.nature || e.event_type || '—')}</div>
+            <div class="text-xs text-stone space-y-1">
+              <div><span class="text-stone/70">active time</span> · <span class="font-numeric">${fmtDur(e.duration_sec)}</span></div>
+              <div><span class="text-stone/70">wall-clock</span> · <span class="font-numeric">${fmtDur(e.wall_clock_sec)}</span></div>
+              <div><span class="text-stone/70">started</span> · <span class="font-mono">${esc(e.started_at) || '—'}</span></div>
+              <div><span class="text-stone/70">ended</span> · <span class="font-mono">${esc(e.ended_at) || '—'}</span></div>
+            </div>
+            ${(() => {
+              const acts = activitySummary(e.activity);
+              if (!acts.length) return '<div class="text-xs text-stone/60 italic">no activity counters for this event type</div>';
+              return `<table class="text-xs w-full max-w-xs mt-1">${acts.map(([k, v]) => `
+                <tr class="border-b border-mist/50 dark:border-slate/50">
+                  <td class="py-1 pr-4 text-stone">${k}</td>
+                  <td class="py-1 text-right font-numeric text-ink dark:text-paper">${fmtInt(v)}</td>
+                </tr>`).join('')}</table>`;
+            })()}
+            ${toolBreakdownHtml(e.tool_breakdown)}
+          </div>
+          <!-- Token breakdown -->
           <div>
             <div class="text-[10px] uppercase tracking-[0.15em] text-stone mb-2">Token breakdown</div>
             ${tokenBreakdownHtml(e.tokens)}
+            ${modelStatsHtml(e.model_stats)}
           </div>
+          <!-- Technical metadata -->
           <div class="text-xs space-y-1.5 text-stone">
+            <div class="text-[10px] uppercase tracking-[0.15em] text-stone mb-1">Technical</div>
             <div><span class="text-stone/70">event id</span> · <span class="font-mono">${esc(e.id)}</span></div>
             <div><span class="text-stone/70">type</span> · ${esc(e.event_type) || '—'}</div>
+            <div><span class="text-stone/70">project (full)</span> · <span class="font-mono break-all">${e.project ? esc(window.anonymizeProjectId(e.project)) : 'unclassified'}</span></div>
             <div><span class="text-stone/70">machine</span> · <span class="font-mono">${esc(e.machine_id) || '—'}</span></div>
             <div><span class="text-stone/70">originator</span> · <span class="font-mono">${esc(e.originator) || '—'}</span></div>
             <div><span class="text-stone/70">auth mode</span> · ${esc(e.auth_mode) || '—'}</div>
             <div><span class="text-stone/70">model (raw)</span> · <span class="font-mono">${esc(e.model_raw) || '—'}</span></div>
-            <div><span class="text-stone/70">duration</span> · ${e.duration_sec || 0}s</div>
             <div><span class="text-stone/70">usage_breakdown</span> · ${e.has_usage_breakdown ? 'yes' : '<span class="italic">none (hour-estimated / metadata-only event)</span>'}</div>
           </div>
         </div>

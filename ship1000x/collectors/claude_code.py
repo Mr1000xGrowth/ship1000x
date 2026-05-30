@@ -380,6 +380,10 @@ def parse_session_file(path: Path) -> dict[str, Any]:
         # V5 model stats : breakdown par modele LLM utilise sur la journee.
         # model_stats: { "claude-opus-4.7": {tokens_in, tokens_out, cost, turns}, ... }
         "model_stats": {},
+        # V7 tool breakdown : nombre d'appels par NOM d'outil sur la journee.
+        # tool_breakdown: { "Bash": 12, "Read": 30, ... }. Noms categoriels
+        # uniquement — jamais les arguments / la sortie de l'outil.
+        "tool_breakdown": {},
         # V6 entrypoint : "claude-desktop" / "cli" / "sdk-cli" — written by
         # Claude Code into every record. Used by the auth_mode detector to
         # tell OAuth subscriptions apart from API-key usage. Captured once
@@ -519,6 +523,12 @@ def parse_session_file(path: Path) -> dict[str, Any]:
                             if isinstance(block, dict) and block.get("type") == "tool_use":
                                 tu = {"name": block.get("name"), "input": block.get("input", {})}
                                 tool_uses.append(tu)
+                                # V7 : compteur par nom d'outil (categorique).
+                                tname = block.get("name")
+                                if isinstance(tname, str) and tname:
+                                    d["tool_breakdown"][tname] = (
+                                        d["tool_breakdown"].get(tname, 0) + 1
+                                    )
                                 extracted = _extract_tool_paths(tu)
                                 tool_paths.extend(extracted)
                                 d["tool_paths"].extend(extracted)
@@ -722,6 +732,13 @@ def collect(storage, classifier, privacy_config: dict[str, Any]) -> dict[str, in
                                 "turns": int(s["turns"] * ratio),
                             }
                             for m, s in d["model_stats"].items()
+                        },
+                        # V7 : breakdown par nom d'outil (proratise par ratio
+                        # pour coherence avec le split multi-projets). Noms
+                        # categoriels uniquement, jamais d'arguments.
+                        "tool_breakdown": {
+                            name: int(count * ratio)
+                            for name, count in d.get("tool_breakdown", {}).items()
                         },
                         "usage": _build_daily_usage_metadata(d, ratio),
                         # Capture exhaustive : superset normalise de TOUS les
