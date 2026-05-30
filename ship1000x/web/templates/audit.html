@@ -86,6 +86,8 @@ const fmtWhen = iso => {
   if (isNaN(d)) return iso;
   return d.toLocaleString('en-GB', { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' });
 };
+const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => (
+  {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
 const PRICING_BADGE = {
   exact: 'text-emerald-600 dark:text-emerald-500',
@@ -132,11 +134,11 @@ function renderRows(events) {
     return `
     <tr class="hover:bg-chalk dark:hover:bg-slate/30 transition cursor-pointer" data-row="${i}">
       <td class="px-4 py-3 text-xs text-stone whitespace-nowrap">${fmtWhen(e.started_at)}</td>
-      <td class="px-4 py-3 text-xs"><span class="font-mono">${e.source}</span></td>
-      <td class="px-4 py-3 text-xs text-stone">${e.client || '—'}</td>
-      <td class="px-4 py-3 text-xs text-stone">${e.provider || '—'}</td>
-      <td class="px-4 py-3 text-xs font-mono text-ink dark:text-paper">${e.model || '<span class="text-stone italic">—</span>'}</td>
-      <td class="px-4 py-3 text-xs font-mono text-stone">${e.project ? window.anonymizeProjectId(e.project) : '<span class="italic">unclassified</span>'}</td>
+      <td class="px-4 py-3 text-xs"><span class="font-mono">${esc(e.source)}</span></td>
+      <td class="px-4 py-3 text-xs text-stone">${esc(e.client) || '—'}</td>
+      <td class="px-4 py-3 text-xs text-stone">${esc(e.provider) || '—'}</td>
+      <td class="px-4 py-3 text-xs font-mono text-ink dark:text-paper">${e.model ? esc(e.model) : '<span class="text-stone italic">—</span>'}</td>
+      <td class="px-4 py-3 text-xs font-mono text-stone">${e.project ? esc(window.anonymizeProjectId(e.project)) : '<span class="italic">unclassified</span>'}</td>
       <td class="px-4 py-3 text-right font-numeric text-xs">${tt ? fmtBig(tt) : '<span class="text-stone/50">—</span>'}</td>
       <td class="px-4 py-3 text-right font-numeric text-xs">${e.cost_estimated ? fmtCurrency(e.cost_estimated) : '<span class="text-stone/50">—</span>'}</td>
       <td class="px-4 py-3 text-xs"><span class="${pqClass}">${pq}</span></td>
@@ -149,12 +151,12 @@ function renderRows(events) {
             ${tokenBreakdownHtml(e.tokens)}
           </div>
           <div class="text-xs space-y-1.5 text-stone">
-            <div><span class="text-stone/70">event id</span> · <span class="font-mono">${e.id}</span></div>
-            <div><span class="text-stone/70">type</span> · ${e.event_type || '—'}</div>
-            <div><span class="text-stone/70">machine</span> · <span class="font-mono">${e.machine_id || '—'}</span></div>
-            <div><span class="text-stone/70">originator</span> · <span class="font-mono">${e.originator || '—'}</span></div>
-            <div><span class="text-stone/70">auth mode</span> · ${e.auth_mode || '—'}</div>
-            <div><span class="text-stone/70">model (raw)</span> · <span class="font-mono">${e.model_raw || '—'}</span></div>
+            <div><span class="text-stone/70">event id</span> · <span class="font-mono">${esc(e.id)}</span></div>
+            <div><span class="text-stone/70">type</span> · ${esc(e.event_type) || '—'}</div>
+            <div><span class="text-stone/70">machine</span> · <span class="font-mono">${esc(e.machine_id) || '—'}</span></div>
+            <div><span class="text-stone/70">originator</span> · <span class="font-mono">${esc(e.originator) || '—'}</span></div>
+            <div><span class="text-stone/70">auth mode</span> · ${esc(e.auth_mode) || '—'}</div>
+            <div><span class="text-stone/70">model (raw)</span> · <span class="font-mono">${esc(e.model_raw) || '—'}</span></div>
             <div><span class="text-stone/70">duration</span> · ${e.duration_sec || 0}s</div>
             <div><span class="text-stone/70">usage_breakdown</span> · ${e.has_usage_breakdown ? 'yes' : '<span class="italic">none (hour-estimated / metadata-only event)</span>'}</div>
           </div>
@@ -175,7 +177,7 @@ function fillSelect(id, items, current) {
   const sel = document.getElementById(id);
   const keep = sel.querySelector('option').outerHTML;
   sel.innerHTML = keep + items.map(it =>
-    `<option value="${it.value}" ${it.value === current ? 'selected' : ''}>${it.value} (${it.count})</option>`
+    `<option value="${esc(it.value)}" ${it.value === current ? 'selected' : ''}>${esc(it.value)} (${it.count})</option>`
   ).join('');
 }
 

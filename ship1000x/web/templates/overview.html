@@ -123,13 +123,16 @@
           <thead>
             <tr class="text-[11px] uppercase tracking-[0.1em] text-stone border-b border-mist dark:border-slate">
               <th class="text-left py-2 font-medium">Model</th>
+              <th class="text-right py-2 font-medium" title="Nombre d'events agrégés pour ce modèle sur la période">Events</th>
               <th class="text-right py-2 font-medium" title="Contenu envoyé pour la 1re fois, jamais caché — facturé 100% du tarif input">Fresh <span class="text-mist dark:text-slate normal-case">·100%</span></th>
               <th class="text-right py-2 font-medium" title="1re mise en cache du contexte — le token le PLUS cher, facturé 125% du tarif input">Cache write <span class="text-clay normal-case">·125%</span></th>
               <th class="text-right py-2 font-medium" title="Relectures du même contenu déjà caché — le moins cher, ~10% du tarif input">Cache read <span class="text-sage normal-case">·10%</span></th>
-              <th class="text-right py-2 font-medium" title="Réponse du modèle (inclut reasoning/thinking) — tarif output le plus élevé">Output</th>
+              <th class="text-right py-2 font-medium" title="Réponse du modèle — tarif output le plus élevé">Output</th>
+              <th class="text-right py-2 font-medium" title="Tokens de raisonnement / thinking (inclus dans l'output, exposés ici)">Reasoning</th>
               <th class="text-right py-2 font-medium">API-equiv $</th>
+              <th class="text-right py-2 font-medium" title="Part de ce modèle dans le coût API-equivalent total">%</th>
               <th class="text-right py-2 pl-3 font-medium hidden sm:table-cell">Trend (period)</th>
-              <th class="text-left py-2 pl-3 font-medium">Pricing</th>
+              <th class="text-left py-2 pl-3 font-medium">Basis</th>
             </tr>
           </thead>
           <tbody id="cm-rows" class="font-numeric"></tbody>
@@ -540,32 +543,48 @@ async function loadCostModels(days) {
     document.getElementById('cm-apieq').textContent = fmtCurrency(d.totals.api_equivalent);
     const tbody = document.getElementById('cm-rows');
     tbody.innerHTML = '';
-    // Hide rows with no observed activity (e.g. "unknown" with 0 tokens / $0) —
-    // the API stays complete; the view only drops pure-zero noise.
-    const visible = (d.by_model || []).filter(m =>
-      (m.cost_api_equivalent || 0) > 0
-      || (m.tokens.cache_read || 0) > 0
-      || (m.tokens.output_tokens || 0) > 0);
+    // Vue complète : tout modèle ayant au moins 1 event sur la période apparaît
+    // (token_metered, hour_estimated ET metadata_only). Le backend ne renvoie
+    // déjà que des modèles actifs ; on n'aplatit plus rien côté affichage.
+    const visible = (d.by_model || []);
     if (!visible.length) {
       const tr = document.createElement('tr');
-      tr.innerHTML = '<td colspan="8" class="py-4 text-center text-stone italic">No model usage in this window.</td>';
+      tr.innerHTML = '<td colspan="11" class="py-4 text-center text-stone italic">No model usage in this window.</td>';
       tbody.appendChild(tr);
     }
+    const BASIS = {
+      token_metered: ['✓ tokens', 'text-sage', 'Tokens réels mesurés (usage_breakdown)'],
+      hour_estimated: ['~ hourly', 'text-clay', 'Coût estimé à partir du temps actif — pas de tokens'],
+      metadata_only: ['· meta', 'text-stone', 'Event purement métadonnée — ni token ni coût'],
+    };
+    const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => (
+      {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
     visible.forEach(m => {
       const tr = document.createElement('tr');
       tr.className = 'border-b border-mist/40 dark:border-slate/40';
-      const badge = m.pricing_quality === 'exact'
+      const pricing = m.pricing_quality === 'exact'
         ? '<span class="text-sage">✓ exact</span>'
-        : '<span class="text-clay">⚠ fallback</span>';
+        : (m.pricing_quality === 'alias'
+            ? '<span class="text-stone">≈ alias</span>'
+            : '<span class="text-clay">⚠ fallback</span>');
+      const [bLabel, bClass, bTitle] = BASIS[m.basis] || BASIS.metadata_only;
+      const reasoning = (m.tokens.thinking||0) + (m.tokens.reasoning||0);
+      const srcSub = (m.sources && m.sources.length)
+        ? `<div class="text-[10px] text-stone normal-case">${esc(m.sources.slice(0,3).join(' · '))}</div>` : '';
+      const dash = '<span class="text-mist dark:text-slate">—</span>';
+      const tok = (v) => v > 0 ? fmtBig(v) : dash;
       tr.innerHTML =
-        `<td class="py-2 text-ink dark:text-paper">${m.provider} / ${m.model_display || m.model}</td>` +
-        `<td class="py-2 text-right text-stone">${fmtBig(m.tokens.fresh_input||0)}</td>` +
-        `<td class="py-2 text-right text-stone">${fmtBig((m.tokens.cache_write_5m||0)+(m.tokens.cache_write_1h||0))}</td>` +
-        `<td class="py-2 text-right text-stone">${fmtBig(m.tokens.cache_read)}</td>` +
-        `<td class="py-2 text-right text-stone">${fmtBig(m.tokens.output_tokens)}</td>` +
-        `<td class="py-2 text-right text-ink dark:text-paper">${fmtCurrency(m.cost_api_equivalent)}</td>` +
+        `<td class="py-2 text-ink dark:text-paper">${esc(m.provider)} / ${esc(m.model_display || m.model)}${srcSub}</td>` +
+        `<td class="py-2 text-right text-stone">${fmtBig(m.events||0)}</td>` +
+        `<td class="py-2 text-right text-stone">${tok(m.tokens.fresh_input||0)}</td>` +
+        `<td class="py-2 text-right text-stone">${tok((m.tokens.cache_write_5m||0)+(m.tokens.cache_write_1h||0))}</td>` +
+        `<td class="py-2 text-right text-stone">${tok(m.tokens.cache_read||0)}</td>` +
+        `<td class="py-2 text-right text-stone">${tok(m.tokens.output_tokens||0)}</td>` +
+        `<td class="py-2 text-right text-stone">${tok(reasoning)}</td>` +
+        `<td class="py-2 text-right text-ink dark:text-paper">${m.cost_api_equivalent > 0 ? fmtCurrency(m.cost_api_equivalent) : dash}</td>` +
+        `<td class="py-2 text-right text-stone">${m.cost_pct > 0 ? m.cost_pct.toFixed(1)+'%' : dash}</td>` +
         `<td class="py-2 pl-3 text-right hidden sm:table-cell">${costSparkline(m.daily, axis)}</td>` +
-        `<td class="py-2 pl-3 text-[11px]">${badge}</td>`;
+        `<td class="py-2 pl-3 text-[11px]"><span class="${bClass}" title="${bTitle}">${bLabel}</span> <span class="text-mist dark:text-slate">·</span> ${pricing}</td>`;
       tbody.appendChild(tr);
     });
     const fb = d.pricing.fallback_models;

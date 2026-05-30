@@ -339,7 +339,15 @@ def create_app(db_path: Path, config_dir: Path) -> Flask:
 
     @app.route("/api/cost-models")
     def api_cost_models():
-        """Coût + tokens par modèle (table daily_model_usage).
+        """Coût + tokens par (provider, modèle) — vue complète et cohérente.
+
+        Agrège directement depuis ``events`` (même base que l'audit log) pour
+        que TOUS les modèles/providers apparaissent, y compris :
+          - token_metered : events avec usage_breakdown (tokens réels) ;
+          - hour_estimated : events sans breakdown mais avec un coût horaire
+            estimé (ex. codex_macapp) ;
+          - metadata_only : events purement métadonnées (0 token, 0 coût —
+            ex. classifications claude_desktop), affichés pour la complétude.
 
         api_equivalent = ce que ça coûterait au tarif API (et-si).
         billed = estimé facturé (0 sous abonnement). subscription_absorbed =
@@ -348,71 +356,108 @@ def create_app(db_path: Path, config_dir: Path) -> Flask:
         days = int(request.args.get("days", 30))
         tok_fields = (
             "fresh_input", "cache_read", "cache_write_5m", "cache_write_1h",
-            "output_tokens", "thinking", "reasoning", "web_search_requests",
+            "output_tokens", "thinking", "reasoning",
+            "web_search_requests", "web_fetch_requests",
         )
         with storage.conn() as conn:
             rows = conn.execute(
-                "SELECT * FROM daily_model_usage "
-                "WHERE date >= date('now', ? || ' days') ORDER BY date",
+                """SELECT date(started_at) AS day, source, cost_estimated, raw_meta
+                   FROM events
+                   WHERE source != 'git' AND started_at IS NOT NULL
+                     AND date(started_at) >= date('now', ? || ' days')""",
                 (f"-{days}",),
             ).fetchall()
-            pricing_version = conn.execute(
-                "SELECT MAX(pricing_version) v FROM daily_model_usage"
-            ).fetchone()["v"]
-            # Coût des events SANS usage_breakdown (sources horaires-estimées :
-            # codex_macapp, sessions dont le fichier a disparu...). Pas dans la
-            # table par-modèle, mais nécessaire pour réconcilier avec le total
-            # global affiché ailleurs (bloc highlights).
-            hourly_estimated = conn.execute(
-                "SELECT COALESCE(SUM(cost_estimated), 0) c FROM events "
-                "WHERE source != 'git' AND date(started_at) >= date('now', ? || ' days') "
-                "AND json_extract(raw_meta, '$.usage_breakdown') IS NULL",
-                (f"-{days}",),
-            ).fetchone()["c"] or 0.0
 
         by_model: dict[tuple, dict] = {}
-        total_api = total_billed = 0.0
+        total_api = total_billed = total_hourly = total_metadata = 0.0
         for r in rows:
-            key = (r["provider"], r["model"])
+            meta = safe_raw_meta(r["raw_meta"])
+            usage = meta.get("usage") if isinstance(meta.get("usage"), dict) else {}
+            ub = meta.get("usage_breakdown") if isinstance(meta.get("usage_breakdown"), dict) else {}
+            raw_model = meta.get("model") or usage.get("model_canonical")
+            model = canonicalize_model(raw_model) if raw_model else "unknown"
+            provider = (
+                (ub.get("provider") if ub else None)
+                or usage.get("provider")
+                or _infer_audit_provider(r["source"], model)
+            )
+            cost = float(r["cost_estimated"] or 0.0)
+            cost_block = usage.get("cost") if isinstance(usage.get("cost"), dict) else {}
+            billed = float(cost_block.get("billed_estimated_usd", 0.0) or 0.0)
+            # Basis de cet event : tokens réels > coût horaire estimé > métadonnée pure.
+            if ub:
+                ev_basis = "token_metered"
+                total_api += cost
+            elif cost > 0:
+                ev_basis = "hour_estimated"
+                total_hourly += cost
+            else:
+                ev_basis = "metadata_only"
+            total_billed += billed
+
+            key = (provider, model)
             m = by_model.get(key)
             if m is None:
-                # Display-only relabel : le `gpt-5` nu = orphelins legacy Codex
-                # (events ingérés avant que turn_context.model fonctionne ;
-                # rollouts sources rotés → version réelle irrécupérable). Les
-                # données fraîches résolvent toujours une version précise
-                # (gpt-5.5/5.4/5.3-codex). On ne devine pas : on le signale.
-                # La donnée stockée reste `gpt-5` ; seul l'affichage change.
-                model_display = r["model"]
-                if r["provider"] == "openai" and r["model"] == "gpt-5":
+                model_display = model
+                if provider == "openai" and model == "gpt-5":
                     model_display = "gpt-5 (version non détectée)"
+                pr = resolve_model_pricing(provider, model)
+                pquality = "exact" if pr.match_quality == "exact" else (
+                    "fallback" if pr.unknown_model else pr.match_quality
+                )
                 m = {
-                    "provider": r["provider"], "model": r["model"],
+                    "provider": provider, "model": model,
                     "model_display": model_display,
                     "tokens": {f: 0 for f in tok_fields},
                     "cost_api_equivalent": 0.0, "cost_billed": 0.0,
-                    "pricing_quality": r["pricing_quality"],
-                    "auth_mode": r["auth_mode"], "daily": [],
+                    "events": 0,
+                    "basis_counts": {"token_metered": 0, "hour_estimated": 0, "metadata_only": 0},
+                    "sources": {},
+                    "pricing_quality": pquality,
+                    "auth_mode": usage.get("auth_mode") or meta.get("auth_mode") or "unknown",
+                    "_daily": {},
                 }
                 by_model[key] = m
             for f in tok_fields:
-                m["tokens"][f] += r[f] or 0
-            m["cost_api_equivalent"] += r["cost_api_equivalent"] or 0.0
-            m["cost_billed"] += r["cost_billed"] or 0.0
-            m["daily"].append({
-                "date": r["date"],
-                "cost": round(r["cost_api_equivalent"] or 0.0, 4),
-            })
-            total_api += r["cost_api_equivalent"] or 0.0
-            total_billed += r["cost_billed"] or 0.0
+                m["tokens"][f] += int(ub.get(f, 0) or 0) if ub else 0
+            m["cost_api_equivalent"] += cost
+            m["cost_billed"] += billed
+            m["events"] += 1
+            m["basis_counts"][ev_basis] += 1
+            m["sources"][r["source"]] = m["sources"].get(r["source"], 0) + 1
+            if cost:
+                m["_daily"][r["day"]] = m["_daily"].get(r["day"], 0.0) + cost
 
+        # Basis dominant + totaux tokens par modèle, mise en forme finale.
+        for m in by_model.values():
+            bc = m["basis_counts"]
+            if bc["token_metered"]:
+                m["basis"] = "token_metered"
+            elif bc["hour_estimated"]:
+                m["basis"] = "hour_estimated"
+            else:
+                m["basis"] = "metadata_only"
+            t = m["tokens"]
+            m["tokens_total"] = (
+                t["fresh_input"] + t["cache_read"] + t["cache_write_5m"]
+                + t["cache_write_1h"] + t["output_tokens"]
+            )
+            m["sources"] = sorted(m["sources"], key=lambda s: -m["sources"][s])
+            m["daily"] = [
+                {"date": d, "cost": round(c, 4)} for d, c in sorted(m.pop("_daily").items())
+            ]
+
+        grand_total = total_api + total_hourly
         models = sorted(by_model.values(), key=lambda x: -x["cost_api_equivalent"])
         for m in models:
+            m["cost_pct"] = round(100.0 * m["cost_api_equivalent"] / grand_total, 1) if grand_total else 0.0
             m["cost_api_equivalent"] = round(m["cost_api_equivalent"], 2)
             m["cost_billed"] = round(m["cost_billed"], 2)
         fallback_models = [
             f"{m['provider']}/{m['model']}" for m in models
-            if m["pricing_quality"] == "fallback"
+            if m["pricing_quality"] != "exact"
         ]
+        from ship1000x.core.pricing import PRICING_VERSION
         # Shared daily axis for the whole window so per-model sparklines line up
         # (zero-filled on inactive days) and clearly track the selected period.
         from datetime import date, timedelta
@@ -424,14 +469,15 @@ def create_app(db_path: Path, config_dir: Path) -> Flask:
             "date_axis": date_axis,
             "totals": {
                 "token_metered": round(total_api, 2),
-                "hourly_estimated": round(hourly_estimated, 2),
-                "api_equivalent": round(total_api + hourly_estimated, 2),
+                "hourly_estimated": round(total_hourly, 2),
+                "api_equivalent": round(grand_total, 2),
                 "billed": round(total_billed, 2),
-                "subscription_absorbed": round(total_api + hourly_estimated - total_billed, 2),
+                "subscription_absorbed": round(grand_total - total_billed, 2),
+                "model_count": len(models),
             },
             "by_model": models,
             "pricing": {
-                "version": pricing_version,
+                "version": PRICING_VERSION,
                 "fallback_models": fallback_models,
                 "freshness": pricing_freshness(),
                 "note": "API-equivalent = what-if at API rates, not an invoice.",
