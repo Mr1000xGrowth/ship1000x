@@ -175,3 +175,109 @@ def push_to_s3(
             raise RuntimeError(f"Echec upload {key} : {e}") from e
 
     return {"uploaded": uploaded, "dry_run": False, "objects": results}
+
+
+def _build_s3_client(cloud_config: dict[str, Any]):
+    """Construit un client boto3 S3 configure pour Garage (path-style + checksums).
+
+    Factorise la config partagee entre push_to_s3 et push_cadence_to_s3.
+    Leve RuntimeError si boto3 est absent.
+    """
+    try:
+        import os
+
+        import boto3
+        from botocore.config import Config
+    except ImportError as e:
+        raise RuntimeError("boto3 requis pour push S3. pip install boto3") from e
+
+    # Garage S3 rejette la streaming signature boto3 par defaut : on force le
+    # hash deterministe via ces 2 env vars (cf. push_to_s3).
+    os.environ.setdefault("AWS_REQUEST_CHECKSUM_CALCULATION", "when_required")
+    os.environ.setdefault("AWS_RESPONSE_CHECKSUM_VALIDATION", "when_required")
+
+    endpoint = cloud_config.get("endpoint")
+    region = cloud_config.get("region", "garage")
+    s3_kwargs: dict[str, Any] = {"region_name": region}
+    if endpoint:
+        s3_kwargs["endpoint_url"] = endpoint
+    s3_kwargs["config"] = Config(
+        s3={"addressing_style": "path"},
+        connect_timeout=15,
+        read_timeout=30,
+        retries={"max_attempts": 3},
+    )
+    return boto3.client("s3", **s3_kwargs)
+
+
+def push_cadence_to_s3(
+    profile: dict[str, Any],
+    cloud_config: dict[str, Any],
+    user_email: str,
+    dry_run: bool = False,
+) -> dict[str, Any]:
+    """Push le profil de cadence personnel (1 objet/user) vers le bucket S3.
+
+    Le profil de cadence est un agregat per-user (percentiles de rythme,
+    cap auto) — pas de partition par mois ni par machine. On ecrit un seul
+    objet ecrase a chaque push.
+
+    Format : s3://<bucket>/cadence/<user>.json.gz
+
+    Returns:
+        {"uploaded": int, "dry_run": bool, "key": str, "size_bytes": int}
+    """
+    if not profile:
+        return {"uploaded": 0, "dry_run": dry_run, "key": "", "size_bytes": 0}
+
+    bucket = cloud_config.get("bucket")
+    if not bucket:
+        raise ValueError("cloud.bucket manquant dans privacy.yaml")
+
+    user_slug = user_email.replace("@", "-at-").replace(".", "-")
+    key = f"cadence/{user_slug}.json.gz"
+
+    payload_obj = {
+        "_meta": True,
+        "version": "1.0",
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "user_email": user_email,
+        "kind": "cadence_profile",
+        "profile": profile,
+    }
+    raw = json.dumps(payload_obj, separators=(",", ":")).encode("utf-8")
+    buf = io.BytesIO()
+    with gzip.GzipFile(fileobj=buf, mode="wb", compresslevel=6) as gz:
+        gz.write(raw)
+    payload = buf.getvalue()
+
+    if dry_run:
+        return {
+            "uploaded": 0,
+            "dry_run": True,
+            "key": key,
+            "size_bytes": len(payload),
+        }
+
+    try:
+        from botocore.exceptions import ClientError
+    except ImportError as e:
+        raise RuntimeError("boto3 requis pour push S3. pip install boto3") from e
+
+    client = _build_s3_client(cloud_config)
+    try:
+        client.put_object(
+            Bucket=bucket,
+            Key=key,
+            Body=payload,
+            ContentType="application/gzip",
+            Metadata={
+                "user-email": user_email,
+                "kind": "cadence_profile",
+                "generated-at": datetime.now(timezone.utc).isoformat(),
+            },
+        )
+    except ClientError as e:
+        raise RuntimeError(f"Echec upload {key} : {e}") from e
+
+    return {"uploaded": 1, "dry_run": False, "key": key, "size_bytes": len(payload)}
