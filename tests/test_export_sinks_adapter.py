@@ -43,7 +43,7 @@ class TestS3RollupSink:
         ) as mock_push:
             sink = S3RollupSink(
                 {"bucket": "rollup-test"},
-                "charles@example.com",
+                "user@example.com",
                 machine_id="mac-1",
             )
             rollups = [
@@ -55,7 +55,7 @@ class TestS3RollupSink:
             args, kwargs = mock_push.call_args
             assert args[0] == rollups
             assert args[1] == {"bucket": "rollup-test"}
-            assert args[2] == "charles@example.com"
+            assert args[2] == "user@example.com"
             assert kwargs.get("machine_id") == "mac-1"
 
     def test_empty_iterable_does_not_push(self):

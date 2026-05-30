@@ -103,8 +103,8 @@ L'alias `Storage = SQLiteStorage` est maintenu pour compatibilité
 ascendante.
 
 **Adapters Premium prévus (Wave 5)** : `PostgresStorage`,
-`ClickHouseStorage` — backends scalables pour les workloads team /
-enterprise.
+`ClickHouseStorage` — backends scalables pour les workloads à plus
+grande échelle.
 
 ### `SourceCollector` — lire une source locale, émettre des events
 

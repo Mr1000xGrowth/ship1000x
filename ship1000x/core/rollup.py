@@ -1,7 +1,8 @@
 """Rollup aggregator — agrege events bruts en `daily_rollup`.
 
-Les rollups sont les SEULES donnees pushees vers le bucket equipe.
-Aucune donnee event-level ne quitte la machine.
+Les rollups sont les SEULES donnees pushees vers le bucket S3 que tu
+controles (si la synchro cloud est activee). Aucune donnee event-level
+ne quitte la machine.
 
 Schema rollup :
   (date, project_id, source, machine_id) ->

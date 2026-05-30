@@ -2,7 +2,7 @@
 
 The OSS adapter is the SQLite-backed :class:`ship1000x.core.storage.Storage`.
 Premium adapters can implement ``PostgresStorage`` /
-``ClickHouseStorage`` for team / enterprise scale in Wave 5.
+``ClickHouseStorage`` for larger-scale workloads in Wave 5.
 
 The port covers three concerns:
 

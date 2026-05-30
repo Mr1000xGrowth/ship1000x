@@ -399,8 +399,8 @@ def detect_morcellement(storage, window: Window) -> list[dict[str, Any]]:
 def compute_all_signals(storage, window: Window) -> list[dict[str, Any]]:
     """Lance tous les detecteurs + tri par severite.
 
-    Signaux equipe (solitude, imbalance) sont calcules cote dashboard
-    un dashboard externe qui voit tous les users, pas cote tracker local.
+    Seuls les signaux personnels (calcules sur tes propres donnees) sont
+    produits ici.
     """
     signals = []
     signals.extend(detect_burnout(storage, window))

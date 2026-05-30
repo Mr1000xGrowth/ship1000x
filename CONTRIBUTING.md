@@ -48,8 +48,8 @@ ruff check .
   real users and their feedback.
 - **Web dashboard / SaaS features** — those are on the roadmap but need
   careful design. Open an issue first.
-- **Team / multi-user aggregation** in the core — ship1000x is
-  mono-user by design. Aggregation is the job of downstream consumers.
+- **Multi-user aggregation** in the core — ship1000x is mono-user by
+  design.
 
 ## Code style
 

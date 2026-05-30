@@ -51,8 +51,8 @@ class S3RollupSink:
 
         sink = S3RollupSink(
             cloud_config={"bucket": "...", "endpoint": "..."},
-            user_email="charles@leadsflowai.com",
-            machine_id="MacBook-Charles.local",
+            user_email="you@example.com",
+            machine_id="your-machine.local",
         )
 
     Usage::

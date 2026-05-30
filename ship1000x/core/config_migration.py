@@ -91,7 +91,7 @@ def migrate_privacy_config(
             if name and name not in share:
                 share[name] = "aggregated"
 
-    # _default = aggregated si partage equipe actif, private sinon.
+    # _default = aggregated si la synchro cloud est active, private sinon.
     # Critique : si share_cloud=true et _default absent, rien ne part jamais.
     expected_default = "aggregated" if share_cloud else "private"
     if "_default" not in share:
