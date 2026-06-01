@@ -147,6 +147,36 @@ def _infer_audit_provider(source: str, model: str) -> str:
     return "anthropic"
 
 
+_UB_TOKEN_FIELDS = (
+    "fresh_input", "cache_read", "cache_write_5m", "cache_write_1h",
+    "output_tokens", "thinking", "reasoning",
+)
+_USAGE_TOKEN_FIELDS = (
+    "input_tokens", "output_tokens", "cached_input_tokens",
+    "cache_write_tokens", "reasoning_tokens",
+)
+
+
+def _event_total_tokens(meta: dict, row) -> int:
+    """Total LLM tokens for one event, read from raw_meta (the real source,
+    incl. cache) like the cost-models view — with a column fallback. The
+    top-level token_input/output columns hold only a fraction (no cache), so
+    summing them undercounts to ~0 for cache-heavy Claude usage.
+    """
+    ub = meta.get("usage_breakdown")
+    if isinstance(ub, dict) and ub:
+        return sum(int(ub.get(f) or 0) for f in _UB_TOKEN_FIELDS)
+    usage = meta.get("usage")
+    if isinstance(usage, dict):
+        tok = usage.get("tokens")
+        if isinstance(tok, dict) and tok:
+            return sum(int(tok.get(f) or 0) for f in _USAGE_TOKEN_FIELDS)
+    try:
+        return int(row["token_input"] or 0) + int(row["token_output"] or 0)
+    except (KeyError, IndexError, TypeError):
+        return 0
+
+
 def _cost_presentation(
     *,
     api_equivalent: float,
@@ -528,7 +558,7 @@ def create_app(db_path: Path, config_dir: Path) -> Flask:
             b = buckets[mode_of.get(truth.auth_mode, "unknown")]
             b["events"] += 1
             b["api_equivalent_usd"] += truth.api_equivalent_usd
-            b["tokens"] += int(r["token_input"] or 0) + int(r["token_output"] or 0)
+            b["tokens"] += _event_total_tokens(meta, r)
 
         total_cost = sum(b["api_equivalent_usd"] for b in buckets.values())
         total_tokens = sum(b["tokens"] for b in buckets.values())
@@ -743,14 +773,15 @@ def create_app(db_path: Path, config_dir: Path) -> Flask:
             p = by_project[pid]
             sec = r["sec"] or 0
             n = 1
+            meta = safe_raw_meta(r["raw_meta"])
             cost = api_equivalent_cost_from_row(r)
             truth = event_cost_truth(
                 stored_cost=float(r["cost_estimated"] or 0.0),
-                meta=safe_raw_meta(r["raw_meta"]),
+                meta=meta,
                 unknown_strategy="include_in_api_equivalent",
             )
             p["total_sec"] += sec
-            p["total_tokens"] += int(r["token_input"] or 0) + int(r["token_output"] or 0)
+            p["total_tokens"] += _event_total_tokens(meta, r)
             p["total_cost"] += cost
             p["cost_truth"]["api_equivalent_usd"] += truth.api_equivalent_usd
             p["cost_truth"]["billed_estimated_usd"] += truth.billed_estimated_usd

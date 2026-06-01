@@ -439,6 +439,32 @@ class TestDashboardSmoke(unittest.TestCase):
         for forbidden in ("cwd", "raw_meta", "/Users", "diff", "prompt"):
             self.assertNotIn(forbidden, blob)
 
+    def test_api_projects_tokens_read_from_raw_meta_not_columns(self):
+        # Regression: the bulk of tokens (esp. cache) lives in raw_meta, not the
+        # token_input/output columns. Summing columns undercounts to ~0.
+        s = Storage(self.db_path)
+        ts = datetime.now(timezone.utc).isoformat()
+        with s.conn() as c:
+            c.execute(
+                """INSERT INTO events
+                   (id, source, event_type, project_id, started_at, duration_sec,
+                    cost_estimated, token_input, token_output, confidence_flag,
+                    raw_meta, machine_id)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    "tok1", "claude_code", "session_day", "tokproj", ts, 60, 1.0,
+                    0, 0, "high",  # columns at 0 on purpose
+                    json.dumps({"usage_breakdown": {
+                        "fresh_input": 1000, "cache_read": 900000,
+                        "cache_write_5m": 40000, "output_tokens": 18000,
+                    }}),
+                    "test",
+                ),
+            )
+        data = self._make_client().get("/api/projects?days=30").get_json()
+        proj = next(p for p in data if p["project_id"] == "tokproj")
+        self.assertEqual(proj["total_tokens"], 959000)
+
     def test_api_production_mode_splits_by_auth_route(self):
         # setUp seeds e1 (auth_mode=api_key, api_equivalent 5.0) -> programmatic
         # and e2 (codex_macapp, auth_mode=oauth, api_equivalent 10.0) -> interactive.
