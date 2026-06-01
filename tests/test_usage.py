@@ -48,6 +48,32 @@ def test_build_usage_metadata_marks_native_tokens_factual():
     assert usage["provenance"]["pricing_model_canonical"] == "gpt-5-codex"
 
 
+def test_stale_pricing_downgrades_factual_cost_to_defensible():
+    """A2: when the local rate card is stale, a factual native-token cost is
+    downgraded to defensible (rates may have moved). The freshness signal flows
+    into the per-event confidence instead of staying in a sidecar command."""
+    from unittest import mock
+
+    with mock.patch(
+        "ship1000x.core.usage.pricing_freshness",
+        return_value={"version": PRICING_VERSION, "age_days": 200, "stale": True},
+    ):
+        usage = build_usage_metadata(
+            provider="openai",
+            client="codex-cli",
+            model_raw="gpt-5-codex-preview",
+            tokens=TokenBreakdown(input_tokens=1000, output_tokens=200),
+            cost_estimated=0.003,
+            cost_quality="factual",
+            token_source="codex_total_token_usage",
+        )
+
+    # Native tokens stay factual; only the cost confidence reflects staleness.
+    assert usage["quality"]["tokens"] == "factual"
+    assert usage["quality"]["cost"] == "defensible"
+    assert usage["cost"]["quality"] == "defensible"
+
+
 def test_build_unknown_usage_metadata_marks_missing_tokens_unknown():
     usage = build_unknown_usage_metadata(
         provider="openai",

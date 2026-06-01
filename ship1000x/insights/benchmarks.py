@@ -1,7 +1,15 @@
 """Benchmarks de reference pour le calcul des multiplicateurs IA-native.
 
 Toutes les valeurs sont ajustables via `config/benchmarks.yaml` si besoin.
-Les valeurs par defaut sont calibrees France 2026 pour un dev senior.
+
+PROVENANCE — a lire avant de citer un facteur en externe :
+Ces valeurs par defaut sont des HYPOTHESES INTERNES (ordres de grandeur
+plausibles France 2026), PAS des mesures sourcees ni un standard industrie.
+Elles servent de denominateur au "facteur vs senior" exporte (insights push,
+rapport Markdown) : tout chiffre quote en externe doit donc porter le caveat
+"benchmark = hypothese interne" (voir `multiplier.confidence`). Pour une
+defense d'audit, remplacer ces valeurs par une source citable via
+`config/benchmarks.yaml`.
 """
 
 from __future__ import annotations
@@ -17,7 +25,9 @@ DEFAULTS: dict[str, Any] = {
     "tjm_senior_mid": 900,
     "tjm_senior_high": 1200,
 
-    # Lignes de code produites par heure, dev senior SANS IA (industrie)
+    # Lignes/h, dev senior SANS IA. HYPOTHESE INTERNE (non sourcee), pas un
+    # standard industrie : a citer comme hypothese ou a remplacer par une
+    # source via config/benchmarks.yaml avant toute quote externe.
     "lines_per_hour_no_ai_low": 20,
     "lines_per_hour_no_ai_mid": 35,
     "lines_per_hour_no_ai_high": 50,

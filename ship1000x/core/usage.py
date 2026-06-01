@@ -11,7 +11,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
-from ship1000x.core.pricing import PRICING_SOURCE, PRICING_VERSION, resolve_model_pricing
+from ship1000x.core.pricing import (
+    PRICING_SOURCE,
+    PRICING_VERSION,
+    pricing_freshness,
+    resolve_model_pricing,
+)
 
 MeasurementQuality = Literal["factual", "defensible", "indicative", "unknown"]
 
@@ -210,6 +215,15 @@ def build_usage_metadata(
         and pricing.match_quality in {"fallback", "unknown"}
     ):
         normalized_cost_quality = "indicative"
+    elif normalized_cost_quality == "factual" and pricing_freshness().get("stale"):
+        # Native tokens priced against a local rate card older than the
+        # staleness threshold: the cost stays a DEFENSIBLE modeled estimate
+        # (explicit, verifiable assumption = "rates as of PRICING_VERSION"),
+        # not an audit-grade factual number, because published rates may have
+        # moved. The freshness signal already exists in `pricing_freshness`;
+        # this wires it into the per-event confidence the user reads next to
+        # the dollar figure instead of leaving it in a sidecar command.
+        normalized_cost_quality = "defensible"
     cost_value = round(float(cost_estimated or 0.0), 8)
     normalized_auth_mode = (auth_mode or "unknown").strip().lower()
     if normalized_auth_mode not in {"oauth", "api_key", "unknown"}:

@@ -56,20 +56,32 @@ Le filtre `share_config` ne protège pas le multiplicateur : `factor_vs_senior` 
 
 ## 🟠 Axes d'amélioration (différables)
 
-| Axe | Détail | Effort |
-|---|---|---|
-| **A1** | `confidence_flag` → brancher sur `usage.quality` (généraliser `trace._confidence_from_quality`) ; exposer `project_conf` séparément. Rend le Trust Score honnête. | Moyen + re-backfill `reclassify` |
-| **A2** | Câbler `pricing_freshness().stale` dans le downgrade `cost_quality` (`usage.py:208`). Pas stale aujourd'hui (41j<60). | Faible |
-| **A3** | Sourcer / marquer « hypothèse » le benchmark `lines_per_hour_no_ai` (`benchmarks.py:21`) — dénominateur du facteur exporté. | Faible |
-| **A4** | `quality_for_tokens` granulaire (cache manquant → `defensible`). Capture déjà OK (Wave 4) ; seul le label est grossier. | Moyen |
-| **A5** | Repondérer le score global autrement que par `event_count` brut. Conception, pas bug. | Conception |
+| Axe | Détail | Effort | Statut |
+|---|---|---|---|
+| **A1** | `confidence_flag` → brancher sur `usage.quality` (généraliser `trace._confidence_from_quality`) ; exposer `project_conf` séparément. Rend le Trust Score honnête. | Moyen + re-backfill `reclassify` | à faire |
+| **A2** | Câbler `pricing_freshness().stale` dans le downgrade `cost_quality` (`usage.py`). | Faible | ✅ fait |
+| **A3** | Marquer « hypothèse interne » le benchmark `lines_per_hour_no_ai` (`benchmarks.py`) — dénominateur du facteur exporté. | Faible | ✅ fait |
+| **A4** | `quality_for_tokens` granulaire (cache manquant → `defensible`). Capture déjà OK (Wave 4) ; seul le label est grossier. | Moyen | à faire |
+| **A5** | Repondérer le score global autrement que par `event_count` brut. Conception, pas bug. | Conception | à faire |
 
 ## Ordre de remédiation
 
-1. **U1 + U2** (quick-win, externe, zéro risque tokens). ← en cours
-2. **A2 + A3** (propagation de signaux existants).
-3. **A1** (Trust Score honnête + re-backfill).
+1. ✅ **U1 + U2** — multiplicateur exporté sur lignes `real` + bande de confiance.
+2. ✅ **A2 + A3** — fraîcheur pricing → `cost_quality` ; benchmark marqué hypothèse.
+3. **A1** (Trust Score honnête + re-backfill). ← prochaine étape
 4. **A4 / A5** (fond, non bloquant).
+
+### Détail A2 (fait)
+`usage.py` : quand `pricing_freshness().stale` (carte tarifaire > 60j), un coût
+`factual` sur tokens natifs est rétrogradé `defensible` (les taux publiés ont pu
+bouger). Dormant aujourd'hui (41j<60) ; testé en forçant `stale` dans
+`test_usage.py::test_stale_pricing_downgrades_factual_cost_to_defensible`.
+
+### Détail A3 (fait)
+`benchmarks.py` : le commentaire « (industrie) » est remplacé par un bloc
+PROVENANCE explicite — les `lines_per_hour_no_ai` sont des hypothèses internes
+non sourcées, à citer comme telles ou à remplacer via `config/benchmarks.yaml`.
+Cohérent avec `multiplier.confidence.benchmark_source = "internal_assumption"`.
 
 ## Findings retirés / requalifiés
 
