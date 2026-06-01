@@ -194,7 +194,12 @@ class TestMultiplier(unittest.TestCase):
             event_type="commit",
             started_at=ts.isoformat(),
             duration_sec=0,
-            raw_meta=json.dumps({"lines_added": 1000, "lines_deleted": 0, "files_changed": 5}),
+            raw_meta=json.dumps({
+                "lines_added": 1000, "lines_deleted": 0, "files_changed": 5,
+                # Le multiplicateur (exporte) se base sur les lignes "real" :
+                # un vrai commit porte cette valeur via le line-classifier.
+                "lines_real_added": 1000, "lines_real_deleted": 0,
+            }),
             project_id="test",
         )
         w = Window(
@@ -203,6 +208,7 @@ class TestMultiplier(unittest.TestCase):
         )
         m = compute_multiplier(s, w, tjm_eur_per_day=1000)
         self.assertAlmostEqual(m["output"]["lines_per_hour"], 1000, places=0)
+        self.assertEqual(m["output"]["lines_basis"], "real")
         # Benchmark senior : 20-50 l/h
         # Facteur = 1000/50 = x20 (low) à 1000/20 = x50 (high)
         self.assertAlmostEqual(m["output"]["factor_vs_senior_low"], 20, places=0)
@@ -227,7 +233,10 @@ class TestMultiplier(unittest.TestCase):
             started_at=ts.isoformat(),
             duration_sec=0,
             cost_estimated=0.0,
-            raw_meta=json.dumps({"lines_added": 100, "lines_deleted": 0, "files_changed": 1}),
+            raw_meta=json.dumps({
+                "lines_added": 100, "lines_deleted": 0, "files_changed": 1,
+                "lines_real_added": 100, "lines_real_deleted": 0,
+            }),
             project_id="test",
         )
         w = Window(

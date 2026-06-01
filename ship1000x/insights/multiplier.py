@@ -36,14 +36,23 @@ def compute_multiplier(
     wday = workday_hours if workday_hours is not None else b["workday_hours"]
 
     overview = compute_overview(storage, window)
-    active_hours = overview["totals"]["active_hours"]
-    lines_added = overview["totals"]["lines_added"]
-    commits = overview["totals"]["commits"]
-    cost = overview["totals"]["cost"]
-    lines_net = lines_added - overview["totals"]["lines_deleted"]
+    totals = overview["totals"]
+    active_hours = totals["active_hours"]
+    # Productivite DEFENDABLE : on se base sur les lignes "real" (sans seed,
+    # vendored, generated/lockfiles), coherent avec `highlights` et les ratios
+    # de l'engine (lines_per_hour). Ce multiplicateur etant EXPORTE (insights
+    # push S3, rapport Markdown), il ne doit jamais s'appuyer sur la base brute
+    # gonflee : un repo a gros lockfiles/node_modules ferait exploser le facteur.
+    lines_real_added = totals.get("lines_real_added", 0) or 0
+    lines_real_deleted = totals.get("lines_real_deleted", 0) or 0
+    lines_raw_added = totals["lines_added"]
+    commits = totals["commits"]
+    cost = totals["cost"]
+    lines_net = lines_real_added - lines_real_deleted
 
-    # Facteur production : lignes/h vs benchmark senior
-    lines_per_hour = (lines_added / active_hours) if active_hours else 0.0
+    # Facteur production : lignes real/h vs benchmark senior
+    lines_per_hour = (lines_real_added / active_hours) if active_hours else 0.0
+    lines_per_hour_raw = (lines_raw_added / active_hours) if active_hours else 0.0
     factor_low = lines_per_hour / b["lines_per_hour_no_ai_high"] if b["lines_per_hour_no_ai_high"] else None
     factor_mid = lines_per_hour / b["lines_per_hour_no_ai_mid"] if b["lines_per_hour_no_ai_mid"] else None
     factor_high = lines_per_hour / b["lines_per_hour_no_ai_low"] if b["lines_per_hour_no_ai_low"] else None
@@ -68,6 +77,8 @@ def compute_multiplier(
         },
         "output": {
             "lines_per_hour": round(lines_per_hour, 1),
+            "lines_per_hour_raw": round(lines_per_hour_raw, 1),
+            "lines_basis": "real",
             "benchmark_senior_low": b["lines_per_hour_no_ai_low"],
             "benchmark_senior_high": b["lines_per_hour_no_ai_high"],
             "factor_vs_senior_low": round(factor_low, 1) if factor_low else None,
@@ -86,5 +97,19 @@ def compute_multiplier(
             "per_hour_usd": round(cost_per_hour, 2) if cost_per_hour else None,
             "per_commit_usd": round(cost_per_commit, 2) if cost_per_commit else None,
             "per_line_net_usd": round(cost_per_line, 4) if cost_per_line else None,
+        },
+        # Bande de confiance — ce bloc voyage avec le payload exporte (insights
+        # push, rapport Markdown). Le multiplicateur est un chiffre "pitch" : il
+        # ne doit jamais sortir sans ses caveats explicites.
+        "confidence": {
+            "lines_basis": "real",
+            "benchmark_source": "internal_assumption",
+            "caveats": [
+                "Facteur calcule sur lignes 'real' (vrai code, hors lockfiles/"
+                "vendored/seed), pas sur le total brut.",
+                "Benchmark senior 20/35/50 l/h = hypothese interne non sourcee, "
+                "pas une mesure (a sourcer ou ajuster via config/benchmarks.yaml).",
+                "active_hours via seuil P95 personnel (heuristique adaptative).",
+            ],
         },
     }

@@ -2779,6 +2779,16 @@ def multiplier(since: str, project: str | None, tjm: float | None, value: float 
     console.print(f"  Par commit       : ${c['per_commit_usd'] or 0:.2f}")
     console.print(f"  Par ligne nette  : ${c['per_line_net_usd'] or 0:.4f}")
 
+    conf = m.get("confidence")
+    if conf and conf.get("caveats"):
+        console.print()
+        console.print(
+            f"[dim]Base : lignes {conf.get('lines_basis', 'real')} (vrai code). "
+            "Caveats :[/dim]"
+        )
+        for caveat in conf["caveats"]:
+            console.print(f"[dim]  · {caveat}[/dim]")
+
 
 @cli.command()
 @click.option("--since", default="30d")

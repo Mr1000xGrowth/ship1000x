@@ -304,6 +304,15 @@ def generate_report(storage, cutoff: datetime, since_label: str = "") -> str:
             f"${c['per_commit_usd'] or 0:.2f}/commit · "
             f"${c['per_line_net_usd'] or 0:.4f}/ligne nette"
         )
+        conf = mult.get("confidence")
+        if conf and conf.get("caveats"):
+            lines.append("")
+            lines.append(
+                f"> Base : lignes **{conf.get('lines_basis', 'real')}** (vrai code). "
+                "Caveats :"
+            )
+            for caveat in conf["caveats"]:
+                lines.append(f"> - {caveat}")
         lines.append("")
 
         if signals_list:
