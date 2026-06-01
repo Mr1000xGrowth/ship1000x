@@ -379,6 +379,7 @@ class TestDashboardSmoke(unittest.TestCase):
                 "total_hours",
                 "dominant_tool",
                 "commits",
+                "total_tokens",
                 "total_api_equivalent_cost",
                 "total_billed_estimated_cost",
                 "total_subscription_absorbed_cost",

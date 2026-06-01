@@ -708,6 +708,8 @@ def create_app(db_path: Path, config_dir: Path) -> Flask:
                        source,
                        duration_sec AS sec,
                        cost_estimated,
+                       token_input,
+                       token_output,
                        raw_meta
                    FROM events
                    WHERE date(started_at) >= date('now', ? || ' days')
@@ -724,6 +726,7 @@ def create_app(db_path: Path, config_dir: Path) -> Flask:
                     "schema_version": "ship1000x.dashboard.project.v1",
                     "project_id": pid,
                     "total_sec": 0,
+                    "total_tokens": 0,
                     "total_cost": 0.0,
                     "cost_truth": {
                         "api_equivalent_usd": 0.0,
@@ -747,6 +750,7 @@ def create_app(db_path: Path, config_dir: Path) -> Flask:
                 unknown_strategy="include_in_api_equivalent",
             )
             p["total_sec"] += sec
+            p["total_tokens"] += int(r["token_input"] or 0) + int(r["token_output"] or 0)
             p["total_cost"] += cost
             p["cost_truth"]["api_equivalent_usd"] += truth.api_equivalent_usd
             p["cost_truth"]["billed_estimated_usd"] += truth.billed_estimated_usd

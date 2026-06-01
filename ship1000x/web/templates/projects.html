@@ -29,11 +29,12 @@
             <th class="px-5 py-4 text-left">Dominant tool</th>
             <th class="px-5 py-4 text-right cursor-pointer hover:text-ink dark:hover:text-paper transition" data-sort="sources_ia">Sessions IA</th>
             <th class="px-5 py-4 text-right cursor-pointer hover:text-ink dark:hover:text-paper transition" data-sort="commits">Commits</th>
+            <th class="px-5 py-4 text-right cursor-pointer hover:text-ink dark:hover:text-paper transition" data-sort="total_tokens">Tokens (LLM)</th>
             <th class="px-5 py-4 text-right cursor-pointer hover:text-ink dark:hover:text-paper transition" data-sort="total_api_equivalent_cost">API-equivalent cost</th>
           </tr>
         </thead>
         <tbody id="projects-tbody" class="divide-y divide-mist dark:divide-slate">
-          <tr><td colspan="6" class="px-5 py-12 text-center text-stone italic">Loading…</td></tr>
+          <tr><td colspan="7" class="px-5 py-12 text-center text-stone italic">Loading…</td></tr>
         </tbody>
         <tfoot class="border-t border-mist dark:border-slate font-medium text-ink dark:text-paper">
           <tr>
@@ -42,6 +43,7 @@
             <td></td>
             <td class="px-5 py-4 text-right font-numeric" id="foot-sessions">—</td>
             <td class="px-5 py-4 text-right font-numeric" id="foot-commits">—</td>
+            <td class="px-5 py-4 text-right font-numeric" id="foot-tokens">—</td>
             <td class="px-5 py-4 text-right font-numeric" id="foot-cost">—</td>
           </tr>
         </tfoot>
@@ -60,6 +62,7 @@ let currentSort = { key: 'total_hours', desc: true };
 const fmtH = h => !h ? '—' : (h < 1 ? Math.round(h * 60) + 'min' : h.toFixed(1) + 'h');
 const fmtCurrency = n => '$' + (n || 0).toLocaleString('en-US', {maximumFractionDigits: 2});
 const fmtInt = n => (n || 0).toLocaleString('en-US');
+const fmtBig = n => { n = n || 0; return n >= 1e9 ? (n/1e9).toFixed(2)+' Md' : n >= 1e6 ? (n/1e6).toFixed(1)+' M' : n >= 1e3 ? (n/1e3).toFixed(0)+' k' : String(n|0); };
 
 function renderRows() {
   const filter = document.getElementById('filter-input').value.toLowerCase();
@@ -72,7 +75,7 @@ function renderRows() {
 
   const tbody = document.getElementById('projects-tbody');
   if (rows.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="6" class="px-5 py-12 text-center text-stone italic">No projects match.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" class="px-5 py-12 text-center text-stone italic">No projects match.</td></tr>';
   } else {
     tbody.innerHTML = rows.map(p => `
       <tr class="hover:bg-chalk dark:hover:bg-slate/30 transition">
@@ -86,6 +89,7 @@ function renderRows() {
         </td>
         <td class="px-5 py-3 text-right font-numeric text-stone">${p.sources_ia}</td>
         <td class="px-5 py-3 text-right font-numeric text-stone">${p.commits}</td>
+        <td class="px-5 py-3 text-right font-numeric text-stone" title="LLM tokens consumed (input + output) attributed to this project">${p.total_tokens ? fmtBig(p.total_tokens) : '—'}</td>
         <td class="px-5 py-3 text-right">
           <div class="font-numeric">${fmtCurrency(p.total_api_equivalent_cost)}</div>
           <div class="text-[10px] text-stone italic mt-1">
@@ -102,6 +106,7 @@ function renderRows() {
   document.getElementById('foot-hours').textContent = fmtH(rows.reduce((s, p) => s + (p.total_hours || 0), 0));
   document.getElementById('foot-sessions').textContent = fmtInt(rows.reduce((s, p) => s + p.sources_ia, 0));
   document.getElementById('foot-commits').textContent = fmtInt(rows.reduce((s, p) => s + p.commits, 0));
+  document.getElementById('foot-tokens').textContent = fmtBig(rows.reduce((s, p) => s + (p.total_tokens || 0), 0));
   document.getElementById('foot-cost').textContent = fmtCurrency(rows.reduce((s, p) => s + p.total_api_equivalent_cost, 0));
 }
 
