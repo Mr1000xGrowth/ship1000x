@@ -438,6 +438,24 @@ class TestDashboardSmoke(unittest.TestCase):
         for forbidden in ("cwd", "raw_meta", "/Users", "diff", "prompt"):
             self.assertNotIn(forbidden, blob)
 
+    def test_api_production_mode_splits_by_auth_route(self):
+        # setUp seeds e1 (auth_mode=api_key, api_equivalent 5.0) -> programmatic
+        # and e2 (codex_macapp, auth_mode=oauth, api_equivalent 10.0) -> interactive.
+        r = self._make_client().get("/api/production-mode?days=30")
+        self.assertEqual(r.status_code, 200)
+        d = r.get_json()
+        self.assertEqual(d["schema_version"], "ship1000x.dashboard.production_mode.v1")
+        m = d["modes"]
+        self.assertGreater(m["programmatic"]["api_equivalent_usd"], 0)
+        self.assertGreater(m["interactive"]["api_equivalent_usd"], 0)
+        for mode in ("interactive", "programmatic", "unknown"):
+            self.assertIn("cost_share_pct", m[mode])
+            self.assertIn("token_share_pct", m[mode])
+        # privacy boundary: aggregates only
+        blob = json.dumps(d)
+        for forbidden in ("raw_meta", "cwd", "/Users", "prompt", "diff"):
+            self.assertNotIn(forbidden, blob)
+
     def test_api_projects_uses_explicit_cost_truth_for_api_equivalent_total(self):
         s = Storage(self.db_path)
         ts = datetime.now(timezone.utc).isoformat()

@@ -492,6 +492,65 @@ def create_app(db_path: Path, config_dir: Path) -> Flask:
             "by_day": day_rows,
         })
 
+    @app.route("/api/production-mode")
+    def api_production_mode():
+        """Interactive (subscription/OAuth) vs Programmatic (API key) lens.
+
+        Baseline capture: how much LLM production happened hand-piloted on a
+        subscription vs via a billable/automatable API route. Derived from the
+        already-collected ``auth_mode``. MEASURED only — the "with budget I'd
+        do N× more" projection belongs in the Estimate tab, not here.
+        """
+        from ship1000x.core.cost_truth import event_cost_truth, safe_raw_meta
+
+        days = int(request.args.get("days", 30))
+        mode_of = {"oauth": "interactive", "api_key": "programmatic", "unknown": "unknown"}
+        buckets = {
+            m: {"events": 0, "api_equivalent_usd": 0.0, "tokens": 0}
+            for m in ("interactive", "programmatic", "unknown")
+        }
+        with storage.conn() as conn:
+            rows = conn.execute(
+                """SELECT cost_estimated, token_input, token_output, raw_meta
+                   FROM events
+                   WHERE source NOT IN ('git', 'git_secret_alert')
+                     AND started_at IS NOT NULL
+                     AND date(started_at) >= date('now', ? || ' days')""",
+                (f"-{days}",),
+            ).fetchall()
+        for r in rows:
+            meta = safe_raw_meta(r["raw_meta"])
+            truth = event_cost_truth(
+                stored_cost=float(r["cost_estimated"] or 0.0),
+                meta=meta,
+                unknown_strategy="include_in_api_equivalent",
+            )
+            b = buckets[mode_of.get(truth.auth_mode, "unknown")]
+            b["events"] += 1
+            b["api_equivalent_usd"] += truth.api_equivalent_usd
+            b["tokens"] += int(r["token_input"] or 0) + int(r["token_output"] or 0)
+
+        total_cost = sum(b["api_equivalent_usd"] for b in buckets.values())
+        total_tokens = sum(b["tokens"] for b in buckets.values())
+        for m, b in buckets.items():
+            b["api_equivalent_usd"] = round(b["api_equivalent_usd"], 2)
+            b["cost_share_pct"] = round(b["api_equivalent_usd"] / total_cost * 100, 1) if total_cost else 0.0
+            b["token_share_pct"] = round(b["tokens"] / total_tokens * 100, 1) if total_tokens else 0.0
+
+        return jsonify({
+            "schema_version": "ship1000x.dashboard.production_mode.v1",
+            "days": days,
+            "modes": buckets,
+            "totals": {"api_equivalent_usd": round(total_cost, 2), "tokens": total_tokens},
+            # The interactive share is today's hand-piloted subscription baseline.
+            # As programmatic (API/loops/workers) scales, its share climbs here.
+            "baseline_note": (
+                "Interactive = subscription, hand-piloted (today's ceiling, no "
+                "agentic parallelisation yet). Programmatic = billable API route, "
+                "automatable. Measured split; growth projections live in Estimate."
+            ),
+        })
+
     @app.route("/api/cost-models")
     def api_cost_models():
         """Coût + tokens par (provider, modèle) — vue complète et cohérente.

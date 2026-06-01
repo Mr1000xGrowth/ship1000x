@@ -266,6 +266,46 @@
     </div>
   </section>
 
+  <!-- PRODUCTION MODE (interactive subscription vs programmatic API) -->
+  <section class="space-y-4">
+    <div class="flex items-baseline justify-between">
+      <div>
+        <div class="text-[11px] uppercase tracking-[0.2em] text-stone font-medium">Production mode</div>
+        <div class="text-xs text-stone mt-1">hand-piloted subscription vs billable/automatable API — your baseline before agentic parallelisation</div>
+      </div>
+      <span class="text-[10px] uppercase tracking-[0.2em] text-sage font-medium">Factual</span>
+    </div>
+
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-px bg-mist dark:bg-slate border border-mist dark:border-slate rounded-lg overflow-hidden">
+      <div class="metric-card bg-paper dark:bg-graphite p-6">
+        <div class="text-[11px] uppercase tracking-[0.15em] text-stone font-medium">Interactive · subscription</div>
+        <div class="mt-2 font-display text-3xl text-ink dark:text-paper font-numeric" id="pm-interactive">—</div>
+        <div class="text-[11px] text-stone mt-1 italic" id="pm-interactive-detail">hand-piloted</div>
+      </div>
+      <div class="metric-card bg-paper dark:bg-graphite p-6">
+        <div class="text-[11px] uppercase tracking-[0.15em] text-stone font-medium">Programmatic · API</div>
+        <div class="mt-2 font-display text-3xl text-ink dark:text-paper font-numeric" id="pm-programmatic">—</div>
+        <div class="text-[11px] text-stone mt-1 italic" id="pm-programmatic-detail">billable · automatable</div>
+      </div>
+      <div class="metric-card bg-paper dark:bg-graphite p-6">
+        <div class="text-[11px] uppercase tracking-[0.15em] text-stone font-medium">Unknown route</div>
+        <div class="mt-2 font-display text-3xl text-ink dark:text-paper font-numeric" id="pm-unknown">—</div>
+        <div class="text-[11px] text-stone mt-1 italic">auth not detected</div>
+      </div>
+    </div>
+
+    <div class="bg-paper dark:bg-graphite border border-mist dark:border-slate rounded-lg p-6 space-y-3">
+      <div class="flex h-9 w-full overflow-hidden rounded-md bg-mist dark:bg-slate" id="pm-bar"></div>
+      <div class="flex flex-wrap items-center gap-x-6 gap-y-1 text-xs text-stone">
+        <span><span class="inline-block w-2 h-2 rounded-full mr-1" style="background:#c8a464"></span>Interactive</span>
+        <span><span class="inline-block w-2 h-2 rounded-full mr-1" style="background:#5a7fd4"></span>Programmatic</span>
+        <span><span class="inline-block w-2 h-2 rounded-full mr-1" style="background:#a8a29e"></span>Unknown</span>
+        <span class="ml-auto" id="pm-total">—</span>
+      </div>
+      <div class="text-[11px] text-stone italic" id="pm-note"></div>
+    </div>
+  </section>
+
   <!-- CONFIDENCE & DATA QUALITY (consolidated) -->
   <section class="space-y-4">
     <div class="flex items-baseline justify-between">
@@ -768,6 +808,43 @@ async function loadWorkMix(days) {
   }
 }
 
+const PM_COLORS = { interactive: '#c8a464', programmatic: '#5a7fd4', unknown: '#a8a29e' };
+
+async function loadProductionMode(days) {
+  try {
+    const d = await fetchJSON(`/api/production-mode?days=${days}`);
+    const m = d.modes;
+    const fmtPctCost = (mode) => {
+      const b = m[mode];
+      return `${b.cost_share_pct}%`;
+    };
+    document.getElementById('pm-interactive').textContent = fmtPctCost('interactive');
+    document.getElementById('pm-programmatic').textContent = fmtPctCost('programmatic');
+    document.getElementById('pm-unknown').textContent = fmtPctCost('unknown');
+    document.getElementById('pm-interactive-detail').textContent =
+      `hand-piloted · ${fmtCurrency(m.interactive.api_equivalent_usd)} API-eq`;
+    document.getElementById('pm-programmatic-detail').textContent =
+      `billable · ${fmtCurrency(m.programmatic.api_equivalent_usd)} API-eq`;
+    document.getElementById('pm-total').textContent =
+      `${fmtCurrency(d.totals.api_equivalent_usd)} API-equivalent total · share by cost`;
+
+    const bar = document.getElementById('pm-bar');
+    bar.innerHTML = ['interactive', 'programmatic', 'unknown']
+      .filter(k => (m[k].cost_share_pct || 0) > 0)
+      .map(k => {
+        const p = m[k].cost_share_pct;
+        const label = p >= 7 ? `${p.toFixed(0)}%` : '';
+        return `<div title="${k}: ${fmtCurrency(m[k].api_equivalent_usd)} (${p}%)" `
+          + `class="flex items-center justify-center text-[11px] font-semibold text-white" `
+          + `style="width:${p}%;background:${PM_COLORS[k]}">${label}</div>`;
+      })
+      .join('');
+    document.getElementById('pm-note').textContent = d.baseline_note || '';
+  } catch (e) {
+    console.error('ProductionMode error:', e);
+  }
+}
+
 async function reloadData() {
   const days = window.getWindowDays();
   await Promise.all([
@@ -777,6 +854,7 @@ async function reloadData() {
     loadSourceQuality(days),
     loadCostModels(days),
     loadWorkMix(days),
+    loadProductionMode(days),
   ]);
 }
 
