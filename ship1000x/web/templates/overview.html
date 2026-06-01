@@ -245,7 +245,7 @@
         <span><span class="inline-block w-2 h-2 rounded-full mr-1" style="background:#3f9d7a"></span>Docs</span>
         <span><span class="inline-block w-2 h-2 rounded-full mr-1" style="background:#5a7fd4"></span>Config</span>
         <span><span class="inline-block w-2 h-2 rounded-full mr-1" style="background:#c0735a"></span>Data</span>
-        <span class="ml-auto">Docs/code ratio <span class="font-numeric font-semibold text-ink dark:text-paper" id="wm-ratio">—</span></span>
+        <span class="ml-auto">Code/docs ratio <span class="font-numeric font-semibold text-ink dark:text-paper" id="wm-ratio">—</span></span>
       </div>
       <div class="text-[11px] text-stone italic" id="wm-pending"></div>
     </div>
@@ -691,7 +691,7 @@ async function loadWorkMix(days) {
       })
       .join('');
     document.getElementById('wm-ratio').textContent =
-      g.docs_per_code != null ? `×${g.docs_per_code}` : '—';
+      g.code_per_docs != null ? `×${g.code_per_docs}` : '—';
     const pendingEl = document.getElementById('wm-pending');
     pendingEl.textContent = g.pending_reclassify > 0
       ? `${fmtInt(g.pending_reclassify)} lines not yet decomposed — run \`ship1000x reclassify\` to backfill.`

@@ -463,6 +463,9 @@ def create_app(db_path: Path, config_dir: Path) -> Flask:
             return {
                 "total": total,
                 "code_share_pct": round(mix["code"] / total * 100, 1) if total else 0.0,
+                # code_per_docs is the human-readable direction (>1 = more code
+                # than docs); docs_per_code kept for back-compat / doc-coverage.
+                "code_per_docs": round(mix["code"] / mix["docs"], 1) if mix["docs"] else None,
                 "docs_per_code": round(mix["docs"] / mix["code"], 2) if mix["code"] else None,
             }
 
