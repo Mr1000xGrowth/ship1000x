@@ -414,6 +414,81 @@ def create_app(db_path: Path, config_dir: Path) -> Flask:
             for r in rows
         ])
 
+    @app.route("/api/work-mix")
+    def api_work_mix():
+        """Production décomposée par nature de travail (code/docs/config/data).
+
+        Sert les 4 widgets : mix global, mix par projet, mix dans le temps,
+        ratio docs/code. Lit les compteurs de lignes déjà classés stockés dans
+        ``events.raw_meta`` (source=git). Volume seul, aucun facteur inventé
+        pour docs/config/data (pas de benchmark sourcé).
+        """
+        days = int(request.args.get("days", 30))
+        classes = ("code", "docs", "config", "data")
+        with storage.conn() as conn:
+            rows = conn.execute(
+                """SELECT date(started_at) AS day,
+                          COALESCE(project_id, '(unclassified)') AS project,
+                          COALESCE(SUM(CAST(json_extract(raw_meta, '$.lines_code_added') AS INTEGER)), 0) AS code,
+                          COALESCE(SUM(CAST(json_extract(raw_meta, '$.lines_docs_added') AS INTEGER)), 0) AS docs,
+                          COALESCE(SUM(CAST(json_extract(raw_meta, '$.lines_config_added') AS INTEGER)), 0) AS config,
+                          COALESCE(SUM(CAST(json_extract(raw_meta, '$.lines_data_added') AS INTEGER)), 0) AS data,
+                          COALESCE(SUM(CAST(json_extract(raw_meta, '$.lines_real_added') AS INTEGER)), 0) AS real_total
+                   FROM events
+                   WHERE source = 'git' AND started_at IS NOT NULL
+                     AND date(started_at) >= date('now', ? || ' days')
+                   GROUP BY day, project""",
+                (f"-{days}",),
+            ).fetchall()
+
+        global_mix = {c: 0 for c in classes}
+        global_real = 0
+        by_project: dict[str, dict[str, int]] = {}
+        by_day: dict[str, dict[str, int]] = {}
+        for r in rows:
+            global_real += int(r["real_total"] or 0)
+            proj = by_project.setdefault(r["project"], {c: 0 for c in classes})
+            day = by_day.setdefault(r["day"], {c: 0 for c in classes})
+            for c in classes:
+                v = int(r[c] or 0)
+                global_mix[c] += v
+                proj[c] += v
+                day[c] += v
+
+        classified = sum(global_mix.values())
+        pending = max(0, global_real - classified)
+
+        def _ratios(mix: dict[str, int]) -> dict:
+            total = sum(mix.values())
+            return {
+                "total": total,
+                "code_share_pct": round(mix["code"] / total * 100, 1) if total else 0.0,
+                "docs_per_code": round(mix["docs"] / mix["code"], 2) if mix["code"] else None,
+            }
+
+        project_rows = sorted(
+            (
+                {"project": p, **m, **_ratios(m)}
+                for p, m in by_project.items()
+                if sum(m.values()) > 0
+            ),
+            key=lambda x: -x["total"],
+        )[:15]
+        day_rows = [{"date": d, **by_day[d]} for d in sorted(by_day.keys())]
+
+        return jsonify({
+            "schema_version": "ship1000x.dashboard.work_mix.v1",
+            "days": days,
+            "global": {
+                **global_mix,
+                "real_total": global_real,
+                "pending_reclassify": pending,
+                **_ratios(global_mix),
+            },
+            "by_project": project_rows,
+            "by_day": day_rows,
+        })
+
     @app.route("/api/cost-models")
     def api_cost_models():
         """Coût + tokens par (provider, modèle) — vue complète et cohérente.

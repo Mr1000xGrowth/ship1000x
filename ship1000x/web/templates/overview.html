@@ -203,6 +203,66 @@
     </div>
   </section>
 
+  <!-- PRODUCTION BY NATURE (code / docs / config / data) -->
+  <section class="space-y-4">
+    <div class="flex items-baseline justify-between">
+      <div>
+        <div class="text-[11px] uppercase tracking-[0.2em] text-stone font-medium">Production by nature</div>
+        <div class="text-xs text-stone mt-1">where your effort goes — volume only, no fabricated factor for docs/config/data</div>
+      </div>
+      <span class="text-[10px] uppercase tracking-[0.2em] text-sage font-medium">Factual</span>
+    </div>
+
+    <!-- Widget 1 : global mix -->
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-px bg-mist dark:bg-slate border border-mist dark:border-slate rounded-lg overflow-hidden">
+      <div class="metric-card bg-paper dark:bg-graphite p-6">
+        <div class="text-[11px] uppercase tracking-[0.15em] text-stone font-medium">Code</div>
+        <div class="mt-2 font-display text-3xl text-ink dark:text-paper font-numeric" id="wm-code">—</div>
+        <div class="text-[11px] text-stone mt-1 italic" id="wm-code-pct">—</div>
+      </div>
+      <div class="metric-card bg-paper dark:bg-graphite p-6">
+        <div class="text-[11px] uppercase tracking-[0.15em] text-stone font-medium">Docs</div>
+        <div class="mt-2 font-display text-3xl text-ink dark:text-paper font-numeric" id="wm-docs">—</div>
+        <div class="text-[11px] text-stone mt-1 italic" id="wm-docs-pct">—</div>
+      </div>
+      <div class="metric-card bg-paper dark:bg-graphite p-6">
+        <div class="text-[11px] uppercase tracking-[0.15em] text-stone font-medium">Config</div>
+        <div class="mt-2 font-display text-3xl text-ink dark:text-paper font-numeric" id="wm-config">—</div>
+        <div class="text-[11px] text-stone mt-1 italic" id="wm-config-pct">—</div>
+      </div>
+      <div class="metric-card bg-paper dark:bg-graphite p-6">
+        <div class="text-[11px] uppercase tracking-[0.15em] text-stone font-medium">Data / content</div>
+        <div class="mt-2 font-display text-3xl text-ink dark:text-paper font-numeric" id="wm-data">—</div>
+        <div class="text-[11px] text-stone mt-1 italic" id="wm-data-pct">—</div>
+      </div>
+    </div>
+
+    <!-- stacked bar + ratio -->
+    <div class="bg-paper dark:bg-graphite border border-mist dark:border-slate rounded-lg p-6 space-y-3">
+      <div class="flex h-3 w-full overflow-hidden rounded-full bg-mist dark:bg-slate" id="wm-bar"></div>
+      <div class="flex flex-wrap items-center gap-x-6 gap-y-1 text-xs text-stone">
+        <span><span class="inline-block w-2 h-2 rounded-full mr-1" style="background:#c8a464"></span>Code</span>
+        <span><span class="inline-block w-2 h-2 rounded-full mr-1" style="background:#6b8e7a"></span>Docs</span>
+        <span><span class="inline-block w-2 h-2 rounded-full mr-1" style="background:#7a8fb0"></span>Config</span>
+        <span><span class="inline-block w-2 h-2 rounded-full mr-1" style="background:#a8a29e"></span>Data</span>
+        <span class="ml-auto">Docs/code ratio <span class="font-numeric font-semibold text-ink dark:text-paper" id="wm-ratio">—</span></span>
+      </div>
+      <div class="text-[11px] text-stone italic" id="wm-pending"></div>
+    </div>
+
+    <!-- Widget 3 : mix over time -->
+    <div class="bg-paper dark:bg-graphite border border-mist dark:border-slate rounded-lg p-6">
+      <div class="text-[11px] uppercase tracking-[0.15em] text-stone font-medium mb-4">Mix over time — daily lines by nature</div>
+      <canvas id="workmix-chart" height="80"></canvas>
+    </div>
+
+    <!-- Widget 2 : per project -->
+    <div class="bg-paper dark:bg-graphite border border-mist dark:border-slate rounded-lg p-6">
+      <div class="text-[11px] uppercase tracking-[0.15em] text-stone font-medium mb-4">By project — work nature per repo</div>
+      <div id="wm-projects" class="space-y-3"></div>
+    </div>
+  </section>
+
   <!-- CONFIDENCE & DATA QUALITY (consolidated) -->
   <section class="space-y-4">
     <div class="flex items-baseline justify-between">
@@ -601,6 +661,85 @@ async function loadCostModels(days) {
   } catch (e) { /* table reste vide */ }
 }
 
+const WM_COLORS = { code: '#c8a464', docs: '#6b8e7a', config: '#7a8fb0', data: '#a8a29e' };
+const wmK = (n) => (n >= 1e6 ? (n/1e6).toFixed(1)+' M' : n >= 1e3 ? (n/1e3).toFixed(0)+' k' : String(n|0));
+
+async function loadWorkMix(days) {
+  try {
+    const d = await fetchJSON(`/api/work-mix?days=${days}`);
+    const g = d.global;
+    const total = g.total || 0;
+    const pct = (v) => total ? (v / total * 100) : 0;
+    for (const c of ['code', 'docs', 'config', 'data']) {
+      document.getElementById(`wm-${c}`).textContent = fmtInt(g[c] || 0);
+      document.getElementById(`wm-${c}-pct`).textContent = total ? `${pct(g[c]).toFixed(0)}% of real` : '—';
+    }
+    // Stacked bar
+    const bar = document.getElementById('wm-bar');
+    bar.innerHTML = ['code', 'docs', 'config', 'data']
+      .filter(c => (g[c] || 0) > 0)
+      .map(c => `<div title="${c}: ${fmtInt(g[c])}" style="width:${pct(g[c])}%;background:${WM_COLORS[c]}"></div>`)
+      .join('');
+    document.getElementById('wm-ratio').textContent =
+      g.docs_per_code != null ? `×${g.docs_per_code}` : '—';
+    const pendingEl = document.getElementById('wm-pending');
+    pendingEl.textContent = g.pending_reclassify > 0
+      ? `${fmtInt(g.pending_reclassify)} lines not yet decomposed — run \`ship1000x reclassify\` to backfill.`
+      : '';
+
+    // Per-project bars
+    const pc = document.getElementById('wm-projects');
+    if (!d.by_project.length) {
+      pc.innerHTML = '<div class="text-stone text-sm italic">No classified git lines in this window.</div>';
+    } else {
+      pc.innerHTML = d.by_project.map(p => {
+        const t = p.total || 1;
+        const seg = ['code', 'docs', 'config', 'data']
+          .filter(c => (p[c] || 0) > 0)
+          .map(c => `<div title="${c}: ${fmtInt(p[c])}" style="width:${p[c]/t*100}%;background:${WM_COLORS[c]}"></div>`)
+          .join('');
+        return `<div class="space-y-1">
+          <div class="flex items-baseline justify-between text-xs">
+            <span class="text-ink dark:text-paper font-medium truncate pr-2">${p.project}</span>
+            <span class="text-stone font-numeric">${wmK(t)} · ${p.code_share_pct}% code</span>
+          </div>
+          <div class="flex h-2 w-full overflow-hidden rounded-full bg-mist dark:bg-slate">${seg}</div>
+        </div>`;
+      }).join('');
+    }
+
+    // Mix over time (stacked bar chart)
+    const isDark = document.documentElement.classList.contains('dark');
+    const gridColor = isDark ? '#27272a' : '#e7e5e4';
+    const textColor = isDark ? '#a8a29e' : '#78716c';
+    const ctx = document.getElementById('workmix-chart').getContext('2d');
+    if (window._wmChart) window._wmChart.destroy();
+    window._wmChart = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: d.by_day.map(x => x.date.slice(5)),
+        datasets: ['code', 'docs', 'config', 'data'].map(c => ({
+          label: c, data: d.by_day.map(x => x[c] || 0),
+          backgroundColor: WM_COLORS[c], stack: 'mix', borderWidth: 0,
+        })),
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: { labels: { color: textColor, font: { size: 11 }, usePointStyle: true, pointStyle: 'rect' }, position: 'bottom', align: 'end' },
+          tooltip: { backgroundColor: isDark ? '#0a0a0b' : '#fafaf9', titleColor: isDark ? '#fafaf9' : '#0a0a0b', bodyColor: textColor, borderColor: gridColor, borderWidth: 1, padding: 10 },
+        },
+        scales: {
+          x: { stacked: true, ticks: { color: textColor, font: { size: 10 } }, grid: { display: false }, border: { display: false } },
+          y: { stacked: true, ticks: { color: textColor, font: { size: 10 } }, grid: { color: gridColor }, border: { display: false }, beginAtZero: true },
+        },
+      },
+    });
+  } catch (e) {
+    console.error('WorkMix error:', e);
+  }
+}
+
 async function reloadData() {
   const days = window.getWindowDays();
   await Promise.all([
@@ -609,6 +748,7 @@ async function reloadData() {
     loadTrust(days),
     loadSourceQuality(days),
     loadCostModels(days),
+    loadWorkMix(days),
   ]);
 }
 

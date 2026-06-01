@@ -24,6 +24,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Surfaced in the CLI `multiplier`/`insights`, the Markdown report, and the
   insights push payload. New `raw_meta` line keys added to the privacy
   whitelist (numeric counters only; no paths or content).
+- **Dashboard — "Production by nature" section** (Overview tab) with four
+  widgets backed by a new `/api/work-mix` endpoint: global mix (code/docs/
+  config/data), mix over time (stacked daily chart), per-project mix, and the
+  docs/code ratio. Volume only; the endpoint returns aggregates and project
+  names, never paths or content.
 
 ### Changed — trust/reliability corrections (scores may move)
 

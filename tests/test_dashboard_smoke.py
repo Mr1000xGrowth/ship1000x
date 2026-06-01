@@ -399,6 +399,45 @@ class TestDashboardSmoke(unittest.TestCase):
             self.assertEqual(data[0]["cost_truth"]["billed_estimated_usd"], 5.0)
             self.assertEqual(data[0]["cost_truth"]["subscription_absorbed_usd"], 10.0)
 
+    def test_api_work_mix_decomposes_real_lines(self):
+        s = Storage(self.db_path)
+        ts = datetime.now(timezone.utc).isoformat()
+        with s.conn() as c:
+            c.execute(
+                """INSERT INTO events
+                   (id, source, event_type, project_id, started_at, duration_sec,
+                    cost_estimated, confidence_flag, raw_meta, machine_id)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    "wm1", "git", "commit", "alpha", ts, 0, 0.0, "high",
+                    json.dumps({
+                        "lines_added": 1000, "lines_real_added": 1000,
+                        "lines_code_added": 600, "lines_docs_added": 300,
+                        "lines_config_added": 0, "lines_data_added": 100,
+                    }),
+                    "test",
+                ),
+            )
+        r = self._make_client().get("/api/work-mix?days=30")
+        self.assertEqual(r.status_code, 200)
+        d = r.get_json()
+        self.assertEqual(d["schema_version"], "ship1000x.dashboard.work_mix.v1")
+        g = d["global"]
+        self.assertEqual(g["code"], 600)
+        self.assertEqual(g["docs"], 300)
+        self.assertEqual(g["data"], 100)
+        self.assertEqual(g["code_share_pct"], 60.0)
+        self.assertEqual(g["docs_per_code"], 0.5)
+        self.assertEqual(g["pending_reclassify"], 0)
+        self.assertTrue(any(p["project"] == "alpha" for p in d["by_project"]))
+        self.assertTrue(d["by_day"])
+
+    def test_api_work_mix_never_exposes_paths_or_content(self):
+        data = self._make_client().get("/api/work-mix?days=30").get_json()
+        blob = json.dumps(data)
+        for forbidden in ("cwd", "raw_meta", "/Users", "diff", "prompt"):
+            self.assertNotIn(forbidden, blob)
+
     def test_api_projects_uses_explicit_cost_truth_for_api_equivalent_total(self):
         s = Storage(self.db_path)
         ts = datetime.now(timezone.utc).isoformat()
