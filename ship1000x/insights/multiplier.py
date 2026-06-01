@@ -38,11 +38,15 @@ def compute_multiplier(
     overview = compute_overview(storage, window)
     totals = overview["totals"]
     active_hours = totals["active_hours"]
-    # Productivite DEFENDABLE : on se base sur les lignes "real" (sans seed,
-    # vendored, generated/lockfiles), coherent avec `highlights` et les ratios
-    # de l'engine (lines_per_hour). Ce multiplicateur etant EXPORTE (insights
-    # push S3, rapport Markdown), il ne doit jamais s'appuyer sur la base brute
-    # gonflee : un repo a gros lockfiles/node_modules ferait exploser le facteur.
+    # Le facteur de levier compare le CODE a un benchmark de codeur. Les docs /
+    # config / data sont du vrai travail mais ne se comparent pas a un rythme de
+    # code : ils sont reportes en VOLUME dans production_breakdown, jamais dans
+    # le facteur. Voir core.line_classifier (work_class). La base "real" reste
+    # disponible (somme des 4 classes) pour le cout/ligne.
+    lines_code_added = totals.get("lines_code_added", 0) or 0
+    lines_docs_added = totals.get("lines_docs_added", 0) or 0
+    lines_config_added = totals.get("lines_config_added", 0) or 0
+    lines_data_added = totals.get("lines_data_added", 0) or 0
     lines_real_added = totals.get("lines_real_added", 0) or 0
     lines_real_deleted = totals.get("lines_real_deleted", 0) or 0
     lines_raw_added = totals["lines_added"]
@@ -50,8 +54,21 @@ def compute_multiplier(
     cost = totals["cost"]
     lines_net = lines_real_added - lines_real_deleted
 
-    # Facteur production : lignes real/h vs benchmark senior
-    lines_per_hour = (lines_real_added / active_hours) if active_hours else 0.0
+    # Si la decomposition par nature de travail est peuplee, le facteur se base
+    # sur le CODE seul. Sinon (events historiques pas encore reclassifies), on
+    # retombe sur "real" avec un drapeau explicite -> lancer `reclassify`.
+    work_class_total = (
+        lines_code_added + lines_docs_added + lines_config_added + lines_data_added
+    )
+    if work_class_total > 0:
+        factor_basis_added = lines_code_added
+        lines_basis = "code"
+    else:
+        factor_basis_added = lines_real_added
+        lines_basis = "real_pending_reclassify"
+
+    # Facteur production : lignes code/h vs benchmark senior
+    lines_per_hour = (factor_basis_added / active_hours) if active_hours else 0.0
     lines_per_hour_raw = (lines_raw_added / active_hours) if active_hours else 0.0
     factor_low = lines_per_hour / b["lines_per_hour_no_ai_high"] if b["lines_per_hour_no_ai_high"] else None
     factor_mid = lines_per_hour / b["lines_per_hour_no_ai_mid"] if b["lines_per_hour_no_ai_mid"] else None
@@ -78,12 +95,23 @@ def compute_multiplier(
         "output": {
             "lines_per_hour": round(lines_per_hour, 1),
             "lines_per_hour_raw": round(lines_per_hour_raw, 1),
-            "lines_basis": "real",
+            "lines_basis": lines_basis,
             "benchmark_senior_low": b["lines_per_hour_no_ai_low"],
             "benchmark_senior_high": b["lines_per_hour_no_ai_high"],
             "factor_vs_senior_low": round(factor_low, 1) if factor_low else None,
             "factor_vs_senior_mid": round(factor_mid, 1) if factor_mid else None,
             "factor_vs_senior_high": round(factor_high, 1) if factor_high else None,
+        },
+        # Production par NATURE de travail — VOLUME seul, jamais un facteur
+        # "vs humain" (pas de benchmark source pour docs/config/data). Le
+        # facteur ci-dessus ne porte que sur `code`.
+        "production_breakdown": {
+            "code": lines_code_added,
+            "docs": lines_docs_added,
+            "config": lines_config_added,
+            "data": lines_data_added,
+            "real_total": lines_real_added,
+            "pending_reclassify": work_class_total == 0 and lines_real_added > 0,
         },
         "value": {
             "active_hours": round(active_hours, 1),
@@ -102,11 +130,17 @@ def compute_multiplier(
         # push, rapport Markdown). Le multiplicateur est un chiffre "pitch" : il
         # ne doit jamais sortir sans ses caveats explicites.
         "confidence": {
-            "lines_basis": "real",
+            "lines_basis": lines_basis,
             "benchmark_source": "internal_assumption",
             "caveats": [
-                "Facteur calcule sur lignes 'real' (vrai code, hors lockfiles/"
-                "vendored/seed), pas sur le total brut.",
+                (
+                    "Facteur calcule sur lignes de CODE uniquement ; docs, "
+                    "config et data sont reportes en volume (production_breakdown), "
+                    "pas dans le facteur."
+                    if lines_basis == "code"
+                    else "Facteur sur lignes 'real' (decomposition code/docs/data "
+                    "indisponible : lancer `ship1000x reclassify`)."
+                ),
                 "Benchmark senior 20/35/50 l/h = hypothese interne non sourcee, "
                 "pas une mesure (a sourcer ou ajuster via config/benchmarks.yaml).",
                 "active_hours via seuil P95 personnel (heuristique adaptative).",

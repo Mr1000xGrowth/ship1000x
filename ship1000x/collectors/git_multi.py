@@ -392,6 +392,17 @@ def collect(storage, classifier, privacy_config: dict[str, Any]) -> dict[str, in
                     "lines_vendored_deleted": categories["vendored"]["lines_deleted"],
                     "lines_generated_added": categories["generated"]["lines_added"],
                     "lines_generated_deleted": categories["generated"]["lines_deleted"],
+                    # Decomposition du "real" par nature de travail (code vs
+                    # docs vs config vs data). Permet un facteur de levier
+                    # code-vs-code et un reporting volume pour le reste.
+                    "lines_code_added": categories["real_code"]["lines_added"],
+                    "lines_code_deleted": categories["real_code"]["lines_deleted"],
+                    "lines_docs_added": categories["real_docs"]["lines_added"],
+                    "lines_docs_deleted": categories["real_docs"]["lines_deleted"],
+                    "lines_config_added": categories["real_config"]["lines_added"],
+                    "lines_config_deleted": categories["real_config"]["lines_deleted"],
+                    "lines_data_added": categories["real_data"]["lines_added"],
+                    "lines_data_deleted": categories["real_data"]["lines_deleted"],
                     "is_seed_commit": commit["hash"] in root_commits,
                 }),
             }

@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added — production decomposed by nature of work (code / docs / config / data)
+
+- The line classifier now sub-classifies the productive (`real`) lines by work
+  nature via a new `work_class` taxonomy (`core.line_classifier`): **code**
+  (ts/py/go/sql/…), **docs** (md/rst/txt/…), **config** (yaml/toml/ini/…), and
+  **data** (json/csv/srt/svg/html/… — the fallback). Extension lists live in
+  `config/line_classification.yaml` and are extendable via the local override.
+- `git` events store per-class line counts (`lines_{code,docs,config,data}_*`),
+  aggregated by the engine and surfaced as `production_breakdown`.
+- **The leverage factor (`multiplier`) now compares CODE to the code benchmark
+  only.** Docs/config/data are real work but are reported as *volume*, never
+  folded into a "lines of code vs senior" factor. Pre-reclassify events fall
+  back to the `real` basis with an explicit `lines_basis=real_pending_reclassify`
+  flag. Run `ship1000x reclassify` to populate the breakdown on history.
+- Surfaced in the CLI `multiplier`/`insights`, the Markdown report, and the
+  insights push payload. New `raw_meta` line keys added to the privacy
+  whitelist (numeric counters only; no paths or content).
+
 ### Changed — trust/reliability corrections (scores may move)
 
 - **`confidence_flag` now reflects measurement quality, not project

@@ -2759,11 +2759,23 @@ def multiplier(since: str, project: str | None, tjm: float | None, value: float 
     console.print()
     console.print(f"[bold cyan]═══ Multiplicateur IA-native {project or 'global'} | {since} ═══[/bold cyan]")
     console.print()
-    console.print("[bold]Production[/bold]")
-    console.print(f"  Output reel      : {out['lines_per_hour']} lignes/h")
+    console.print("[bold]Production — code (base du facteur)[/bold]")
+    console.print(f"  Code / h         : {out['lines_per_hour']} lignes/h")
     console.print(f"  Benchmark senior : {out['benchmark_senior_low']}-{out['benchmark_senior_high']} lignes/h (sans IA)")
     console.print(f"  Facteur          : [cyan]x{out['factor_vs_senior_low']} → x{out['factor_vs_senior_high']}[/cyan] "
                   f"(mid x{out['factor_vs_senior_mid']})")
+
+    pb = m.get("production_breakdown")
+    if pb:
+        console.print()
+        console.print("[bold]Production — toutes natures (volume, sans facteur)[/bold]")
+        console.print(f"  Code             : {pb['code']:,} lignes".replace(",", " "))
+        console.print(f"  Docs             : {pb['docs']:,} lignes".replace(",", " "))
+        console.print(f"  Config           : {pb['config']:,} lignes".replace(",", " "))
+        console.print(f"  Donnees/contenu  : {pb['data']:,} lignes".replace(",", " "))
+        if pb.get("pending_reclassify"):
+            console.print("  [yellow]⚠ Decomposition indisponible — lance `ship1000x reclassify` "
+                          "(facteur calcule sur 'real' en attendant).[/yellow]")
     console.print()
     console.print(f"[bold]Valeur temps (TJM {m['inputs']['tjm_eur_per_day']} EUR/j, {m['inputs']['workday_hours']}h/j)[/bold]")
     console.print(f"  Temps actif      : {v['active_hours']}h = {v['days_equivalent']}j-equivalents")

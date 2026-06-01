@@ -62,6 +62,7 @@ Le filtre `share_config` ne protège pas le multiplicateur : `factor_vs_senior` 
 | **A1-cont** | Étendre aux sources token-less : `cursor`, `cline`, `codex_macapp`, `codex_desktop`, `claude_statusline`, `openclaw`. Choix de conception : un coût/token `unknown`/`indicative` doit-il faire tomber le flag à `low` (honnête) ou la source garde-t-elle `medium` sur son `active_time` ? | Moyen | à décider |
 | **A2** | Câbler `pricing_freshness().stale` dans le downgrade `cost_quality` (`usage.py`). | Faible | ✅ fait |
 | **A3** | Marquer « hypothèse interne » le benchmark `lines_per_hour_no_ai` (`benchmarks.py`) — dénominateur du facteur exporté. | Faible | ✅ fait |
+| **A6** | Décomposition de la production par nature de travail (code/docs/config/data). Le facteur de levier ne compare que le **code** au benchmark code ; docs/config/data reportés en volume. `work_class` dans `line_classifier` + `production_breakdown` dans `multiplier`. | Moyen + re-backfill | ✅ fait |
 | **A4** | `quality_for_tokens` granulaire (cache manquant → `defensible`). Capture déjà OK (Wave 4) ; seul le label est grossier. | Moyen | à faire |
 | **A5** | Repondérer le score global autrement que par `event_count` brut. Conception, pas bug. | Conception | à faire |
 

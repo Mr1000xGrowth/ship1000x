@@ -196,9 +196,10 @@ class TestMultiplier(unittest.TestCase):
             duration_sec=0,
             raw_meta=json.dumps({
                 "lines_added": 1000, "lines_deleted": 0, "files_changed": 5,
-                # Le multiplicateur (exporte) se base sur les lignes "real" :
-                # un vrai commit porte cette valeur via le line-classifier.
+                # Le facteur (exporte) se base sur les lignes de CODE :
+                # un vrai commit porte ces valeurs via le line-classifier.
                 "lines_real_added": 1000, "lines_real_deleted": 0,
+                "lines_code_added": 1000, "lines_code_deleted": 0,
             }),
             project_id="test",
         )
@@ -208,13 +209,77 @@ class TestMultiplier(unittest.TestCase):
         )
         m = compute_multiplier(s, w, tjm_eur_per_day=1000)
         self.assertAlmostEqual(m["output"]["lines_per_hour"], 1000, places=0)
-        self.assertEqual(m["output"]["lines_basis"], "real")
+        self.assertEqual(m["output"]["lines_basis"], "code")
         # Benchmark senior : 20-50 l/h
         # Facteur = 1000/50 = x20 (low) à 1000/20 = x50 (high)
         self.assertAlmostEqual(m["output"]["factor_vs_senior_low"], 20, places=0)
         self.assertAlmostEqual(m["output"]["factor_vs_senior_high"], 50, places=0)
         # TJM equivalent : 1h / 8h * 1000 EUR = 125 EUR
         self.assertAlmostEqual(m["value"]["tjm_equivalent_eur"], 125, places=0)
+
+    def test_factor_uses_code_only_breakdown_reports_all(self):
+        """The leverage factor compares CODE to a code benchmark; docs/config/
+        data are reported as volume only, never folded into the factor."""
+        s = _make_storage()
+        ts = datetime.now(timezone.utc) - timedelta(hours=1)
+        _insert_event(s, started_at=ts.isoformat(), duration_sec=3600)  # 1h active
+        _insert_event(
+            s,
+            source="git",
+            event_type="commit",
+            started_at=ts.isoformat(),
+            duration_sec=0,
+            raw_meta=json.dumps({
+                "lines_added": 1000, "lines_deleted": 0, "files_changed": 8,
+                "lines_real_added": 1000, "lines_real_deleted": 0,
+                "lines_code_added": 600, "lines_code_deleted": 0,
+                "lines_docs_added": 300, "lines_docs_deleted": 0,
+                "lines_config_added": 0, "lines_config_deleted": 0,
+                "lines_data_added": 100, "lines_data_deleted": 0,
+            }),
+            project_id="test",
+        )
+        w = Window(
+            since=datetime.now(timezone.utc) - timedelta(days=1),
+            until=datetime.now(timezone.utc),
+        )
+        m = compute_multiplier(s, w, tjm_eur_per_day=1000)
+        # Factor on code only: 600 lines / 1h = 600 l/h (not 1000).
+        self.assertAlmostEqual(m["output"]["lines_per_hour"], 600, places=0)
+        self.assertEqual(m["output"]["lines_basis"], "code")
+        pb = m["production_breakdown"]
+        self.assertEqual(pb["code"], 600)
+        self.assertEqual(pb["docs"], 300)
+        self.assertEqual(pb["data"], 100)
+        self.assertEqual(pb["real_total"], 1000)
+        self.assertFalse(pb["pending_reclassify"])
+
+    def test_multiplier_falls_back_to_real_when_workclass_absent(self):
+        """Historical events without the work-class breakdown fall back to the
+        'real' basis and flag that a reclassify is needed."""
+        s = _make_storage()
+        ts = datetime.now(timezone.utc) - timedelta(hours=1)
+        _insert_event(s, started_at=ts.isoformat(), duration_sec=3600)
+        _insert_event(
+            s,
+            source="git",
+            event_type="commit",
+            started_at=ts.isoformat(),
+            duration_sec=0,
+            raw_meta=json.dumps({
+                "lines_added": 500, "lines_deleted": 0, "files_changed": 3,
+                "lines_real_added": 500, "lines_real_deleted": 0,
+            }),
+            project_id="test",
+        )
+        w = Window(
+            since=datetime.now(timezone.utc) - timedelta(days=1),
+            until=datetime.now(timezone.utc),
+        )
+        m = compute_multiplier(s, w, tjm_eur_per_day=1000)
+        self.assertEqual(m["output"]["lines_basis"], "real_pending_reclassify")
+        self.assertAlmostEqual(m["output"]["lines_per_hour"], 500, places=0)
+        self.assertTrue(m["production_breakdown"]["pending_reclassify"])
 
     def test_multiplier_cost_uses_cost_truth_api_equivalent(self):
         s = _make_storage()

@@ -8,6 +8,7 @@ from ship1000x.core.line_classifier import (
     LineClassificationConfig,
     _glob_match,
     classify_commit_lines,
+    classify_work_class,
     is_generated,
     is_seed_commit,
     is_vendored,
@@ -250,15 +251,19 @@ class TestClassifyCommitLines:
         result = classify_commit_lines("feat: add x", files, default_config)
         total_added = sum(a for _, a, _ in files)
         total_deleted = sum(d for _, _, d in files)
-        added_sum = sum(c["lines_added"] for c in result.values())
-        deleted_sum = sum(c["lines_deleted"] for c in result.values())
+        # Only the 4 primary categories partition the input; real_* sub-buckets
+        # are a decomposition of "real" and would double-count.
+        primary = ("real", "seed", "vendored", "generated")
+        added_sum = sum(result[c]["lines_added"] for c in primary)
+        deleted_sum = sum(result[c]["lines_deleted"] for c in primary)
         assert added_sum == total_added
         assert deleted_sum == total_deleted
 
     def test_files_count_match_input(self, default_config):
         files = [("a.ts", 10, 0), ("b.ts", 20, 0), ("package-lock.json", 100, 0)]
         result = classify_commit_lines("feat", files, default_config)
-        assert sum(c["files"] for c in result.values()) == 3
+        primary = ("real", "seed", "vendored", "generated")
+        assert sum(result[c]["files"] for c in primary) == 3
 
 
 # ---- Tests parse_gitattributes ----
@@ -332,3 +337,56 @@ class TestLoadConfig:
         assert "custom/generated/**" in cfg.generated_patterns
         # Override seuil
         assert cfg.seed_lines_threshold == 10_000
+
+
+# ---- Tests work-class (code / docs / config / data) ----
+
+class TestWorkClass:
+    def test_classify_by_extension(self, default_config):
+        assert classify_work_class("src/app.ts", default_config) == "code"
+        assert classify_work_class("a/b/service.py", default_config) == "code"
+        assert classify_work_class("schema.sql", default_config) == "code"
+        assert classify_work_class("README.md", default_config) == "docs"
+        assert classify_work_class("docs/design.mdx", default_config) == "docs"
+        assert classify_work_class("config.yaml", default_config) == "config"
+        assert classify_work_class("pyproject.toml", default_config) == "config"
+        # data = fallback
+        assert classify_work_class("data/fixtures.json", default_config) == "data"
+        assert classify_work_class("subs/video.srt", default_config) == "data"
+        assert classify_work_class("icon.svg", default_config) == "data"
+        assert classify_work_class("Makefile", default_config) == "data"
+
+    def test_real_lines_decomposed_by_work_class(self, default_config):
+        files = [
+            ("src/app.ts", 600, 10),      # code
+            ("README.md", 300, 5),        # docs
+            ("data/seed.json", 100, 0),   # data
+            ("node_modules/x.js", 999, 0),  # vendored -> excluded from real
+        ]
+        result = classify_commit_lines(
+            "feat: stuff", files, default_config, is_first_commit=False
+        )
+        assert result["real"]["lines_added"] == 1000
+        assert result["real_code"]["lines_added"] == 600
+        assert result["real_docs"]["lines_added"] == 300
+        assert result["real_data"]["lines_added"] == 100
+        assert result["real_config"]["lines_added"] == 0
+        # vendored stays out of the real decomposition
+        assert result["vendored"]["lines_added"] == 999
+
+    def test_local_override_adds_work_class_ext(self, tmp_path):
+        base = tmp_path / "classification.yaml"
+        base.write_text(
+            "work_class:\n"
+            "  code:\n"
+            "    - ts\n"
+        )
+        local = tmp_path / "classification.local.yaml"
+        local.write_text(
+            "work_class:\n"
+            "  data:\n"
+            "    - bigxml\n"
+        )
+        cfg = load_config(base, local)
+        assert classify_work_class("x.ts", cfg) == "code"
+        assert classify_work_class("dump.bigxml", cfg) == "data"
