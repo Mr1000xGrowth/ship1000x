@@ -1,98 +1,77 @@
-# Trust audit — handoff note (confidence_flag vs measurement quality)
+# Trust audit — handoff & remediation map
 
-> Note de passation pour une prochaine session. Rédigée après analyse statique
-> du repo (clone vierge, sans base de données réelle). Suite tests : 581 passent,
-> 2 échecs purement liés à l'environnement (build wheel + anonymisation de chemin
-> avec `home=/root`).
+> Note de passation. Audit statique du repo, **version confirmée à jour** :
+> branche `claude/repo-trust-audit-I4NGm` = `origin/main` (dernier commit
+> 2026-05-30) + commits d'audit ; 0 retard ; aucune autre branche plus récente.
+> Suite tests : 581 passent, 2 échecs purement environnementaux (build wheel +
+> anonymisation de chemin avec `home=/root`).
 
-## TL;DR
+## Contexte validé (ne PAS écraser)
 
-Le `confidence_flag` par event — l'unité atomique qui alimente le Trust Score
-global (`insights/trust_score.py`) — est, pour les sources de plus fort poids
-(`claude_code`, `codex`, `git`), **dérivé de la confiance d'attribution projet**,
-alors que `docs/TRUST_SCORE.md:52-59` documente qu'il devrait refléter la
-**qualité de mesure** (tokens/cache/coût/lignes). Le chiffre vendu comme
-« confiance de mesure » mesure en partie autre chose.
+Le travail d'observation des **tokens d'abonnement** est présent et vérifié à la
+source — aucune correction ci-dessous ne le réécrit :
+- Codex CLI lit `total_token_usage` natif + `auth_mode` oauth (`codex.py:236-249`).
+- Codex Desktop parse les vrais tokens de `response.completed`
+  (`codex_desktop.py:106-167,341-345`) ; l'horaire n'est qu'un fallback jours-idle.
+- Claude Code lit tokens natifs + cache depuis le JSONL.
+- 12 collecteurs utilisent `TokenBreakdown` natif ; `cost_truth` /
+  subscription-absorbed / unknown-basis en place (CHANGELOG « Unreleased », Wave 4).
 
-**Correctif recommandé : corriger le CODE, pas la doc** (voir §Décision).
+Le tarif horaire `$10/h` ne subsiste que sur `codex_macapp` (sans tokens) et
+`codex_desktop` (fallback idle) — résidu **by-design**, correctement `indicative`.
 
-## Constat vérifié à la source
+## Thème racine
 
-| Fait | Preuve | Certitude |
+Les signaux de qualité existent mais vivent dans des canaux annexes et ne
+s'injectent pas dans la confiance/base affichée à côté du chiffre — surtout
+quand ce chiffre **sort du tool**.
+
+## Critère de priorité : le chiffre sort-il du tool ?
+
+| Chiffre | Base | Sort en externe ? |
 |---|---|---|
-| `confidence_flag` jamais recalculé en aval, stocké tel quel | `core/storage.py:42,359` | 100 % |
-| `claude_code` dérive le flag de `conf` (attribution projet) | `collectors/claude_code.py:697` ← `classify_session` ligne 624 | 100 % |
-| `codex` idem | `collectors/codex.py:439` ← ligne 397 | 100 % |
-| `git_multi` idem | `collectors/git_multi.py:372` | 100 % |
-| Les règles doc par collecteur ne matchent aucun des 3 | `docs/TRUST_SCORE.md:52-59` | 100 % |
-| La vraie qualité de mesure existe sur le même event | `collectors/claude_code.py:743` → `core/usage.py:build_usage_metadata` → `usage.quality.{tokens,cost,active_time}` | 100 % |
-| Un collecteur fait DÉJÀ le bon mapping (template) | `collectors/trace.py:43` `_confidence_from_quality(usage_quality)` | 100 % |
+| `highlights` (WOW local) | `lines_real` ✅ `cli.py:2502-2536` | non |
+| `compute_multiplier` (« Nx senior ») | `lines_added` **brut** ❌ `multiplier.py:40` | **OUI** → `insights_push.py:181` (S3) + `markdown_report.py:261` |
+| Trust Score global (finding A) | attribution | non (CLI/dashboard only) |
 
-### Nuance importante (le système est hétérogène)
+Le filtre `share_config` ne protège pas le multiplicateur : `factor_vs_senior` /
+`lines_per_hour` ne sont pas « financiers », ils passent même en défaut conservateur.
 
-Le `confidence_flag` n'est pas uniformément basé sur l'attribution. Trois familles :
+---
 
-- **Correct / vérité comptable** : `anthropic_usage`, `openai_usage` codent
-  `"high"` en dur ; `trace` mappe depuis `usage_quality`. → sémantique « mesure » OK.
-- **Attribution / cwd** (le bug) : `claude_code`, `codex`, `git_multi`,
-  `claude_statusline`, `cline`, `cursor`, `openclaw`, `codex_macapp`.
-- **Placeholder statique** : `aider`, `continue_dev`, `copilot_agents`,
-  `cursor_agent`, `gemini_cli`, `opencode`, `roo_kilo_code`, `agent_runtime`
-  codent `"medium"` en dur.
+## 🔴 URGENT — chiffre mou exporté
 
-→ L'incohérence (mélange de sémantiques sous un même nom de champ) est sans
-doute pire qu'une erreur uniforme : le score global agrège des flags qui ne
-veulent pas tous dire la même chose.
+### U1 — Multiplicateur : `lines_added` → `lines_real_added`
+- `multiplier.py:40,43,46` utilisent le brut ; `lines_real_added` est déjà dans
+  `overview["totals"]` (`engine.py:342`) et déjà utilisé par `highlights`.
+- Urgent car seul chiffre mou **poussé en externe** (S3 + Markdown), alimente le
+  pitch « facteur vs senior ». Biais brut documenté ≥ +8 %.
+- Risque sur la collecte tokens : **nul** (choix de colonne). Effort : ~10 lignes.
 
-## Décision : corriger le code
+### U2 — Le multiplicateur exporté n'a aucun label de confiance
+- `compute_multiplier` renvoie des floats nus (`multiplier.py:63-90`).
+- Joindre la base (`real`) + caveat benchmark. Effort faible.
 
-Réconcilier par la doc reviendrait à écrire « le Trust Score mesure la confiance
-d'attribution projet, la vraie qualité de mesure est dans une autre commande ».
-Or dans les rapports le score est affiché **collé à des chiffres de tokens/coût**
-(`docs/TRUST_SCORE.md:176-178`) : une confiance d'attribution à côté d'un montant
-est activement trompeuse pour la cible auditeur/CFO du produit. Le doc-fix
-sauverait la stabilité au prix de la thèse même du produit.
+---
 
-Le code-fix est une **réconciliation, pas une réécriture** : la donnée correcte
-est déjà calculée, et le template (`trace._confidence_from_quality`) existe déjà.
+## 🟠 Axes d'amélioration (différables)
 
-### Forme du correctif
+| Axe | Détail | Effort |
+|---|---|---|
+| **A1** | `confidence_flag` → brancher sur `usage.quality` (généraliser `trace._confidence_from_quality`) ; exposer `project_conf` séparément. Rend le Trust Score honnête. | Moyen + re-backfill `reclassify` |
+| **A2** | Câbler `pricing_freshness().stale` dans le downgrade `cost_quality` (`usage.py:208`). Pas stale aujourd'hui (41j<60). | Faible |
+| **A3** | Sourcer / marquer « hypothèse » le benchmark `lines_per_hour_no_ai` (`benchmarks.py:21`) — dénominateur du facteur exporté. | Faible |
+| **A4** | `quality_for_tokens` granulaire (cache manquant → `defensible`). Capture déjà OK (Wave 4) ; seul le label est grossier. | Moyen |
+| **A5** | Repondérer le score global autrement que par `event_count` brut. Conception, pas bug. | Conception |
 
-1. Dans chaque collecteur attribution-driven, dériver `confidence_flag` de
-   `usage.quality` (min des dimensions pertinentes : tokens/cost pour
-   Claude/Codex ; `line_quality` pour git) — généraliser le pattern
-   `trace._confidence_from_quality`.
-2. Conserver `project_conf` tel quel et l'exposer comme **signal d'attribution
-   distinct**, ne plus le déguiser en confiance de mesure.
-3. Remettre `docs/TRUST_SCORE.md` en cohérence (elle redevient vraie sans
-   changement de fond — c'est ce qu'elle décrit déjà).
+## Ordre de remédiation
 
-### Réserves à traiter dans le correctif
+1. **U1 + U2** (quick-win, externe, zéro risque tokens). ← en cours
+2. **A2 + A3** (propagation de signaux existants).
+3. **A1** (Trust Score honnête + re-backfill).
+4. **A4 / A5** (fond, non bloquant).
 
-- **Backfill historique** : les events stockés ont un flag figé depuis
-  l'attribution → re-backfill nécessaire, mais l'outillage existe
-  (`ship1000x reclassify`).
-- **Les scores vont bouger** (souvent à la baisse là où l'attribution était
-  bonne mais les cache-tokens manquaient). C'est le but. À annoncer au CHANGELOG
-  comme correction de fiabilité, pas régression.
+## Findings retirés / requalifiés
 
-## Angles morts à lever avant d'implémenter (NON vérifiés)
-
-1. **Ampleur réelle de l'impact** sur le score d'un utilisateur : dépend de la
-   distribution `event_count` (pondération du global score, `trust_score.py:105`).
-   Nécessite une vraie base de données. Non mesurable sur clone vierge.
-2. **Surface d'affichage** : confirmer que le nombre vu par l'utilisateur est
-   bien `compute_global_score` et pas une voie alternative dans
-   `insights/engine.py` ou `web/app.py`. Module canonique tracé, surfaces non
-   exhaustivement vérifiées.
-3. **Intention design** : vérifier (git blame / historique / discussions) qu'il
-   n'y a pas eu un choix délibéré d'utiliser l'attribution comme proxy. Aucune
-   doc trouvée le justifiant, mais non infirmé.
-
-## Prochaine session — point de départ
-
-- [ ] Lever les 3 angles morts ci-dessus (surtout #1 sur une vraie base).
-- [ ] Généraliser `_confidence_from_quality` aux collecteurs attribution-driven.
-- [ ] Exposer `project_conf` comme signal d'attribution séparé.
-- [ ] Mettre à jour `docs/TRUST_SCORE.md` + tests + note CHANGELOG.
-- [ ] Re-backfill via `ship1000x reclassify`.
+- **E** (`$10/h`) : retiré comme « problème » → résidu by-design (2 sources, desktop=fallback).
+- **C** : requalifié — la capture cache est OK ; seul le label binaire reste à affiner (A4).
