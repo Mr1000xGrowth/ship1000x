@@ -1326,7 +1326,7 @@ def reclassify(ctx: click.Context, since: str, dry_run: bool, json_output: bool)
 
     A lancer apres :
       - mise a jour du CLI (nouveaux patterns dans line_classification.yaml)
-      - edition de config/line_classification.local.yaml
+      - edition de ~/.config/ship1000x/line_classification.local.yaml
       - changement de regles seed_threshold
     """
     storage = _get_storage()

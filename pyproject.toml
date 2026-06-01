@@ -74,6 +74,7 @@ include = ["ship1000x*"]
 ship1000x = [
     "data/*.json",
     "data/*.md",
+    "config/*.yaml",
     "web/templates/*.html",
 ]
 

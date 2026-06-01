@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from ship1000x.core.line_classifier import (
@@ -390,3 +392,23 @@ class TestWorkClass:
         cfg = load_config(base, local)
         assert classify_work_class("x.ts", cfg) == "code"
         assert classify_work_class("dump.bigxml", cfg) == "data"
+
+
+# ---- Regression : the bundled config must actually load in real installs ----
+
+class TestBundledConfigResolves:
+    def test_git_multi_base_config_path_exists_and_loads_patterns(self):
+        """The line-classification config must ship INSIDE the package so it
+        resolves in editable AND wheel installs. Regression guard for the bug
+        where the path pointed outside the package -> empty generated/vendored
+        patterns -> everything silently classified as 'real'.
+        """
+        import ship1000x.collectors.git_multi as gm
+        base = Path(gm.__file__).parent.parent / "config" / "line_classification.yaml"
+        assert base.exists(), f"bundled config missing at {base}"
+        cfg = load_config(base)
+        assert cfg.generated_patterns, "no generated_patterns loaded"
+        assert cfg.vendored_patterns, "no vendored_patterns loaded"
+        # And the patterns actually classify the obvious cases.
+        assert is_generated("package-lock.json", cfg)
+        assert is_vendored("node_modules/x/y.js", cfg)

@@ -302,9 +302,14 @@ def collect(storage, classifier, privacy_config: dict[str, Any]) -> dict[str, in
 
     since = datetime.utcnow() - timedelta(days=DEFAULT_SINCE_DAYS)
 
-    # Charge la config de classification (versionned + override local si present)
+    # Charge la config de classification. La base est embarquee DANS le package
+    # (ship1000x/config/) pour etre disponible en install editable ET wheel.
+    # L'override utilisateur vit dans ~/.config/ship1000x/ (meme convention que
+    # le .gitleaks.toml ci-dessus) pour survivre aux reinstalls / git pull.
     line_config_base = Path(__file__).parent.parent / "config" / "line_classification.yaml"
-    line_config_local = Path(__file__).parent.parent / "config" / "line_classification.local.yaml"
+    line_config_local = (
+        Path.home() / ".config" / "ship1000x" / "line_classification.local.yaml"
+    )
     line_config = load_line_config(line_config_base, line_config_local)
 
     for repo in _find_git_repos(DEFAULT_SCAN_ROOTS):

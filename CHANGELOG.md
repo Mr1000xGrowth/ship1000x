@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Fixed — line-classification config was never loaded in real installs
+
+- `git_multi` resolved the line-classification config to a path *inside the
+  package* (`ship1000x/config/…`) while the file lived at the repo root, and the
+  config was not in `package-data` either. In every editable/wheel install the
+  base path did not exist, so `generated`/`vendored` patterns loaded **empty** —
+  silently classifying committed lockfiles, `dist/`, `build/`, `node_modules`,
+  and generated outputs as `real`, inflating every productivity line metric.
+  The config now ships inside the package (`ship1000x/config/line_classification.yaml`,
+  added to `package-data`) so it resolves in editable AND wheel installs. A
+  regression test asserts the bundled path exists and loads non-empty patterns.
+- User overrides now live in `~/.config/ship1000x/line_classification.local.yaml`
+  (survives reinstalls / `git pull`), same convention as the gitleaks baseline.
+  Re-run `ship1000x reclassify` after the fix to recompute history.
+
 ### Added — production decomposed by nature of work (code / docs / config / data)
 
 - The line classifier now sub-classifies the productive (`real`) lines by work
