@@ -369,7 +369,12 @@ def collect(storage, classifier, privacy_config: dict[str, Any]) -> dict[str, in
                 "cost_estimated": 0.0,
                 "user_msg_type": None,
                 "wordcount": 0,
-                "confidence_flag": "high" if conf >= 0.8 else "medium",
+                # A1: a commit's line counts come straight from `git numstat` —
+                # a factual native measurement — so the confidence_flag is high
+                # regardless of project-attribution confidence. The attribution
+                # uncertainty (which project this commit maps to) stays in
+                # `project_conf` above, not folded into the flag.
+                "confidence_flag": "high",
                 "raw_meta": json.dumps({
                     # V2 multi-Mac : commit_hash explicite pour dedup cross-machines
                     # cote rollup (GROUP_CONCAT DISTINCT) et cote dashboard (set dedup)

@@ -18,7 +18,11 @@ from pathlib import Path
 from typing import Any
 
 from ship1000x.core.auth_mode import detect_codex_auth_mode
-from ship1000x.core.usage import TokenBreakdown, build_usage_metadata
+from ship1000x.core.usage import (
+    TokenBreakdown,
+    build_usage_metadata,
+    confidence_flag_from_usage,
+)
 
 CODEX_SESSIONS_DIR = Path.home() / ".codex" / "sessions"
 ACTIVE_PAUSE_THRESHOLD_SEC = 5 * 60
@@ -436,7 +440,9 @@ def collect(storage, classifier, privacy_config: dict[str, Any]) -> dict[str, in
             "cost_estimated": parsed["cost_estimated"],
             "user_msg_type": None,
             "wordcount": 0,
-            "confidence_flag": "high" if conf >= 0.8 else ("medium" if conf >= 0.5 else "low"),
+            # A1: confidence_flag reflects token/cost MEASUREMENT quality, not
+            # project attribution (which stays in project_conf above).
+            "confidence_flag": confidence_flag_from_usage(parsed.get("usage")),
             "raw_meta": json.dumps({
                 "user_msg_counts": parsed["user_msg_counts"],
                 "tool_calls": parsed["tool_call_count"],

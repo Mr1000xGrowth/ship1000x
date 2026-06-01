@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Changed — trust/reliability corrections (scores may move)
+
+- **`confidence_flag` now reflects measurement quality, not project
+  attribution** (`claude_code`, `codex`, `git`). Previously these collectors
+  derived the per-event `confidence_flag` (which the global Trust Score
+  averages) from `project_conf` — so the headline score reflected how sure we
+  were *which project* an event belonged to, not how well its tokens/cost were
+  measured. The flag is now derived from `usage.quality.{tokens,cost}` via
+  `ship1000x.core.usage.confidence_flag_from_usage` (Git uses its factual
+  `numstat` line measurement). Project-attribution confidence stays available
+  separately in the event's `project_conf`. Run `ship1000x reclassify` to
+  re-derive historical events where the original local source still exists.
+  Token-less sources (`cursor`, `cline`, `codex_macapp`, `codex_desktop`,
+  `claude_statusline`, `openclaw`) are intentionally not migrated yet — their
+  correct mapping is a separate design decision.
+- **Exported leverage multiplier now uses real lines + carries a confidence
+  band.** `compute_multiplier` switched from raw `lines_added` to
+  `lines_real_added` (consistent with `highlights` and engine ratios), and its
+  output now includes a `confidence` block (`lines_basis`, `benchmark_source`,
+  caveats) surfaced in the Markdown report, the CLI pitch command, and the
+  insights push payload.
+- **Pricing staleness flows into cost confidence.** A factual native-token cost
+  priced against a stale local rate card (`pricing_freshness().stale`, >60d) is
+  downgraded to `defensible`.
+- **Benchmark provenance honesty.** `lines_per_hour_no_ai` is documented as an
+  internal, unsourced assumption (not an industry standard), to be cited as
+  such or replaced via `config/benchmarks.yaml`.
+
 ### Added
 
 - **CLI command-surface guard** — user-facing CLI messages now point to

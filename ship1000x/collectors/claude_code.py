@@ -22,7 +22,11 @@ from pathlib import Path
 from typing import Any
 
 from ship1000x.core.auth_mode import detect_claude_auth_mode
-from ship1000x.core.usage import TokenBreakdown, build_usage_metadata
+from ship1000x.core.usage import (
+    TokenBreakdown,
+    build_usage_metadata,
+    confidence_flag_from_usage,
+)
 
 CLAUDE_CODE_DIR = Path.home() / ".claude" / "projects"
 ACTIVE_PAUSE_THRESHOLD_SEC = 5 * 60  # 5 min entre 2 user events = pause
@@ -677,6 +681,10 @@ def collect(storage, classifier, privacy_config: dict[str, Any]) -> dict[str, in
                 event_id = _stable_event_id(
                     "claude_code", file_key, 0, f"{day_key}|{pid}"
                 )
+                # A1: confidence_flag reflects MEASUREMENT quality (tokens/cost),
+                # not project attribution. The attribution confidence stays in
+                # `project_conf` below. Built once, reused in raw_meta.
+                usage_meta = _build_daily_usage_metadata(d, ratio)
                 event = {
                     "id": event_id,
                     "source": "claude_code",
@@ -694,7 +702,7 @@ def collect(storage, classifier, privacy_config: dict[str, Any]) -> dict[str, in
                     "cost_estimated": d["cost"] * ratio,
                     "user_msg_type": None,
                     "wordcount": int(total_wc * ratio),
-                    "confidence_flag": "high" if conf >= 0.8 else ("medium" if conf >= 0.5 else "low"),
+                    "confidence_flag": confidence_flag_from_usage(usage_meta),
                     "raw_meta": json.dumps({
                         "user_msg_counts": d["user_msg_counts"],
                         "assistant_turns": d["assistant_turns"],
@@ -740,7 +748,7 @@ def collect(storage, classifier, privacy_config: dict[str, Any]) -> dict[str, in
                             name: int(count * ratio)
                             for name, count in d.get("tool_breakdown", {}).items()
                         },
-                        "usage": _build_daily_usage_metadata(d, ratio),
+                        "usage": usage_meta,
                         # Capture exhaustive : superset normalise de TOUS les
                         # champs usage Anthropic (meme schema cross-provider).
                         # total_input = fresh + cache_read + cache_write.

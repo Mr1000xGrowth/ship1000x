@@ -161,6 +161,60 @@ def quality_for_tokens(tokens: TokenBreakdown) -> MeasurementQuality:
     return "factual" if tokens.has_native_tokens else "unknown"
 
 
+# Map of measurement quality -> per-event confidence_flag enum. Coarser than
+# the 4-level quality vocabulary because the schema's confidence_flag is
+# high/medium/low.
+_QUALITY_TO_FLAG = {
+    "factual": "high",
+    "defensible": "medium",
+    "indicative": "low",
+    "unknown": "low",
+}
+_FLAG_RANK = {"high": 2, "medium": 1, "low": 0}
+
+
+def confidence_flag_from_usage(
+    usage: dict | None, *, line_quality: str | None = None
+) -> str:
+    """Derive a per-event ``confidence_flag`` from MEASUREMENT quality.
+
+    This is the A1 fix: historically several collectors set ``confidence_flag``
+    from the *project attribution* confidence (``project_conf``), which the
+    Trust Score then averaged — so the headline number reflected how sure we
+    were *which project* an event belonged to, not how well its tokens/cost
+    were measured. The measurement quality already lives in
+    ``usage.quality.{tokens,cost}`` (see ``build_usage_metadata``); this helper
+    routes it into the flag instead. Project attribution stays available,
+    separately, in the event's ``project_conf`` field.
+
+    Rule: weakest-link over the *hard* measured dimensions the source actually
+    exposes — tokens (only when natively captured) and cost. ``active_time`` is
+    deliberately excluded: it is heuristic for every source, so folding it in
+    would flatten every flag to ``medium``. ``line_quality`` covers Git-style
+    sources that measure lines rather than tokens. Returns ``medium`` when no
+    hard dimension is measurable.
+    """
+    quality = usage.get("quality") if isinstance(usage, dict) else None
+    quality = quality if isinstance(quality, dict) else {}
+    provenance = usage.get("provenance") if isinstance(usage, dict) else None
+    provenance = provenance if isinstance(provenance, dict) else {}
+    token_source = provenance.get("token_source")
+
+    dims: list[str] = []
+    tokens_q = quality.get("tokens")
+    if tokens_q and tokens_q != "n/a" and token_source != "not_exposed":
+        dims.append(str(tokens_q))
+    cost_q = quality.get("cost")
+    if cost_q and cost_q != "n/a":
+        dims.append(str(cost_q))
+    if line_quality and line_quality != "n/a":
+        dims.append(str(line_quality))
+    if not dims:
+        return "medium"
+    flags = [_QUALITY_TO_FLAG.get(d, "low") for d in dims]
+    return min(flags, key=lambda f: _FLAG_RANK[f])
+
+
 def _safe_policy_snapshot(snapshot: dict | None) -> dict | None:
     """Keep only short categorical policy-snapshot metadata.
 

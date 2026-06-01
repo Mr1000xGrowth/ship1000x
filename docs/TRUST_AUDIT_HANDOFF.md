@@ -58,7 +58,8 @@ Le filtre `share_config` ne protège pas le multiplicateur : `factor_vs_senior` 
 
 | Axe | Détail | Effort | Statut |
 |---|---|---|---|
-| **A1** | `confidence_flag` → brancher sur `usage.quality` (généraliser `trace._confidence_from_quality`) ; exposer `project_conf` séparément. Rend le Trust Score honnête. | Moyen + re-backfill `reclassify` | à faire |
+| **A1** | `confidence_flag` → branché sur `usage.quality` pour `claude_code`/`codex`/`git` ; `project_conf` reste séparé. Helper `confidence_flag_from_usage` dans `core/usage.py`. | Moyen + re-backfill `reclassify` | ✅ fait (scope 3 sources) |
+| **A1-cont** | Étendre aux sources token-less : `cursor`, `cline`, `codex_macapp`, `codex_desktop`, `claude_statusline`, `openclaw`. Choix de conception : un coût/token `unknown`/`indicative` doit-il faire tomber le flag à `low` (honnête) ou la source garde-t-elle `medium` sur son `active_time` ? | Moyen | à décider |
 | **A2** | Câbler `pricing_freshness().stale` dans le downgrade `cost_quality` (`usage.py`). | Faible | ✅ fait |
 | **A3** | Marquer « hypothèse interne » le benchmark `lines_per_hour_no_ai` (`benchmarks.py`) — dénominateur du facteur exporté. | Faible | ✅ fait |
 | **A4** | `quality_for_tokens` granulaire (cache manquant → `defensible`). Capture déjà OK (Wave 4) ; seul le label est grossier. | Moyen | à faire |
@@ -68,8 +69,14 @@ Le filtre `share_config` ne protège pas le multiplicateur : `factor_vs_senior` 
 
 1. ✅ **U1 + U2** — multiplicateur exporté sur lignes `real` + bande de confiance.
 2. ✅ **A2 + A3** — fraîcheur pricing → `cost_quality` ; benchmark marqué hypothèse.
-3. **A1** (Trust Score honnête + re-backfill). ← prochaine étape
-4. **A4 / A5** (fond, non bloquant).
+3. ✅ **A1** (scope `claude_code`/`codex`/`git`) — `confidence_flag` mesure la
+   qualité de mesure, plus l'attribution. **Re-backfill requis** :
+   `ship1000x reclassify` (re-runs collectors) propage le nouveau flag aux events
+   historiques dont la source locale existe encore. Les scores vont bouger
+   (souvent à la baisse là où l'attribution était bonne mais le coût
+   indicative/stale) — c'est l'effet recherché, à annoncer au CHANGELOG (fait).
+4. **A1-cont** — sources token-less (décision de conception).
+5. **A4 / A5** (fond, non bloquant).
 
 ### Détail A2 (fait)
 `usage.py` : quand `pricing_freshness().stale` (carte tarifaire > 60j), un coût
