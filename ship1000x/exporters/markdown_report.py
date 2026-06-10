@@ -291,8 +291,15 @@ def generate_report(storage, cutoff: datetime, since_label: str = "") -> str:
         c = mult["cost"]
         lines.append("## Multiplicateur IA-native")
         lines.append("")
-        lines.append(f"- **Facteur de production** : x{out['factor_vs_senior_low']} → x{out['factor_vs_senior_high']} "
-                     f"(mid x{out['factor_vs_senior_mid']}) vs {out['benchmark_senior_low']}-{out['benchmark_senior_high']} lignes/h sans IA")
+        lines.append(f"- **Facteur de production (code)** : x{out['factor_vs_senior_low']} → x{out['factor_vs_senior_high']} "
+                     f"(mid x{out['factor_vs_senior_mid']}) vs {out['benchmark_senior_low']}-{out['benchmark_senior_high']} lignes de code/h sans IA")
+        pb = mult.get("production_breakdown")
+        if pb:
+            lines.append(
+                f"- **Production par nature** (volume, sans facteur) : "
+                f"code {pb['code']:,} · docs {pb['docs']:,} · "
+                f"config {pb['config']:,} · donnees {pb['data']:,} lignes".replace(",", " ")
+            )
         lines.append(f"- **Temps actif** : {v['active_hours']}h = {v['days_equivalent']} jours-equivalents")
         tjm_eur = v['tjm_equivalent_eur']
         lines.append(f"- **Valeur TJM** : {tjm_eur:,.0f} EUR (TJM {mult['inputs']['tjm_eur_per_day']} EUR/j, {mult['inputs']['workday_hours']}h/j)".replace(",", " "))
@@ -304,6 +311,15 @@ def generate_report(storage, cutoff: datetime, since_label: str = "") -> str:
             f"${c['per_commit_usd'] or 0:.2f}/commit · "
             f"${c['per_line_net_usd'] or 0:.4f}/ligne nette"
         )
+        conf = mult.get("confidence")
+        if conf and conf.get("caveats"):
+            lines.append("")
+            lines.append(
+                f"> Base : lignes **{conf.get('lines_basis', 'real')}** (vrai code). "
+                "Caveats :"
+            )
+            for caveat in conf["caveats"]:
+                lines.append(f"> - {caveat}")
         lines.append("")
 
         if signals_list:

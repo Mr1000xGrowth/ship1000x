@@ -302,9 +302,14 @@ def collect(storage, classifier, privacy_config: dict[str, Any]) -> dict[str, in
 
     since = datetime.utcnow() - timedelta(days=DEFAULT_SINCE_DAYS)
 
-    # Charge la config de classification (versionned + override local si present)
+    # Charge la config de classification. La base est embarquee DANS le package
+    # (ship1000x/config/) pour etre disponible en install editable ET wheel.
+    # L'override utilisateur vit dans ~/.config/ship1000x/ (meme convention que
+    # le .gitleaks.toml ci-dessus) pour survivre aux reinstalls / git pull.
     line_config_base = Path(__file__).parent.parent / "config" / "line_classification.yaml"
-    line_config_local = Path(__file__).parent.parent / "config" / "line_classification.local.yaml"
+    line_config_local = (
+        Path.home() / ".config" / "ship1000x" / "line_classification.local.yaml"
+    )
     line_config = load_line_config(line_config_base, line_config_local)
 
     for repo in _find_git_repos(DEFAULT_SCAN_ROOTS):
@@ -369,7 +374,12 @@ def collect(storage, classifier, privacy_config: dict[str, Any]) -> dict[str, in
                 "cost_estimated": 0.0,
                 "user_msg_type": None,
                 "wordcount": 0,
-                "confidence_flag": "high" if conf >= 0.8 else "medium",
+                # A1: a commit's line counts come straight from `git numstat` —
+                # a factual native measurement — so the confidence_flag is high
+                # regardless of project-attribution confidence. The attribution
+                # uncertainty (which project this commit maps to) stays in
+                # `project_conf` above, not folded into the flag.
+                "confidence_flag": "high",
                 "raw_meta": json.dumps({
                     # V2 multi-Mac : commit_hash explicite pour dedup cross-machines
                     # cote rollup (GROUP_CONCAT DISTINCT) et cote dashboard (set dedup)
@@ -387,6 +397,17 @@ def collect(storage, classifier, privacy_config: dict[str, Any]) -> dict[str, in
                     "lines_vendored_deleted": categories["vendored"]["lines_deleted"],
                     "lines_generated_added": categories["generated"]["lines_added"],
                     "lines_generated_deleted": categories["generated"]["lines_deleted"],
+                    # Decomposition du "real" par nature de travail (code vs
+                    # docs vs config vs data). Permet un facteur de levier
+                    # code-vs-code et un reporting volume pour le reste.
+                    "lines_code_added": categories["real_code"]["lines_added"],
+                    "lines_code_deleted": categories["real_code"]["lines_deleted"],
+                    "lines_docs_added": categories["real_docs"]["lines_added"],
+                    "lines_docs_deleted": categories["real_docs"]["lines_deleted"],
+                    "lines_config_added": categories["real_config"]["lines_added"],
+                    "lines_config_deleted": categories["real_config"]["lines_deleted"],
+                    "lines_data_added": categories["real_data"]["lines_added"],
+                    "lines_data_deleted": categories["real_data"]["lines_deleted"],
                     "is_seed_commit": commit["hash"] in root_commits,
                 }),
             }

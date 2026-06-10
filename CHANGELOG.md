@@ -7,6 +7,72 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Fixed — line-classification config was never loaded in real installs
+
+- `git_multi` resolved the line-classification config to a path *inside the
+  package* (`ship1000x/config/…`) while the file lived at the repo root, and the
+  config was not in `package-data` either. In every editable/wheel install the
+  base path did not exist, so `generated`/`vendored` patterns loaded **empty** —
+  silently classifying committed lockfiles, `dist/`, `build/`, `node_modules`,
+  and generated outputs as `real`, inflating every productivity line metric.
+  The config now ships inside the package (`ship1000x/config/line_classification.yaml`,
+  added to `package-data`) so it resolves in editable AND wheel installs. A
+  regression test asserts the bundled path exists and loads non-empty patterns.
+- User overrides now live in `~/.config/ship1000x/line_classification.local.yaml`
+  (survives reinstalls / `git pull`), same convention as the gitleaks baseline.
+  Re-run `ship1000x reclassify` after the fix to recompute history.
+
+### Added — production decomposed by nature of work (code / docs / config / data)
+
+- The line classifier now sub-classifies the productive (`real`) lines by work
+  nature via a new `work_class` taxonomy (`core.line_classifier`): **code**
+  (ts/py/go/sql/…), **docs** (md/rst/txt/…), **config** (yaml/toml/ini/…), and
+  **data** (json/csv/srt/svg/html/… — the fallback). Extension lists live in
+  `config/line_classification.yaml` and are extendable via the local override.
+- `git` events store per-class line counts (`lines_{code,docs,config,data}_*`),
+  aggregated by the engine and surfaced as `production_breakdown`.
+- **The leverage factor (`multiplier`) now compares CODE to the code benchmark
+  only.** Docs/config/data are real work but are reported as *volume*, never
+  folded into a "lines of code vs senior" factor. Pre-reclassify events fall
+  back to the `real` basis with an explicit `lines_basis=real_pending_reclassify`
+  flag. Run `ship1000x reclassify` to populate the breakdown on history.
+- Surfaced in the CLI `multiplier`/`insights`, the Markdown report, and the
+  insights push payload. New `raw_meta` line keys added to the privacy
+  whitelist (numeric counters only; no paths or content).
+- **Dashboard — "Production by nature" section** (Overview tab) with four
+  widgets backed by a new `/api/work-mix` endpoint: global mix (code/docs/
+  config/data), mix over time (stacked daily chart), per-project mix, and the
+  docs/code ratio. Volume only; the endpoint returns aggregates and project
+  names, never paths or content.
+
+### Changed — trust/reliability corrections (scores may move)
+
+- **`confidence_flag` now reflects measurement quality, not project
+  attribution** (`claude_code`, `codex`, `git`). Previously these collectors
+  derived the per-event `confidence_flag` (which the global Trust Score
+  averages) from `project_conf` — so the headline score reflected how sure we
+  were *which project* an event belonged to, not how well its tokens/cost were
+  measured. The flag is now derived from `usage.quality.{tokens,cost}` via
+  `ship1000x.core.usage.confidence_flag_from_usage` (Git uses its factual
+  `numstat` line measurement). Project-attribution confidence stays available
+  separately in the event's `project_conf`. Run `ship1000x reclassify` to
+  re-derive historical events where the original local source still exists.
+  Token-less sources (`cursor`, `cline`, `codex_macapp`, `codex_desktop`,
+  `claude_statusline`, `openclaw`) are intentionally not migrated yet — their
+  correct mapping is a separate design decision.
+- **Exported leverage multiplier now uses real lines + carries a confidence
+  band.** `compute_multiplier` switched from raw `lines_added` to
+  `lines_real_added` (consistent with `highlights` and engine ratios), and its
+  output now includes a `confidence` block (`lines_basis`, `benchmark_source`,
+  caveats) surfaced in the Markdown report, the CLI pitch command, and the
+  insights push payload.
+- **Pricing staleness flows into cost confidence.** A factual native-token cost
+  priced against a stale local rate card (`pricing_freshness().stale`, >60d) is
+  downgraded to `defensible`.
+- **Benchmark provenance honesty.** `lines_per_hour_no_ai` is documented as an
+  internal, unsourced assumption (not an industry standard), to be cited as
+  such or replaced via `config/benchmarks.yaml`.
+
 ### Added
 
 - **CLI command-surface guard** — user-facing CLI messages now point to

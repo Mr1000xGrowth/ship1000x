@@ -44,6 +44,12 @@ ALLOWED_META_KEYS = {
     "lines_seed_added", "lines_seed_deleted",
     "lines_vendored_added", "lines_vendored_deleted",
     "lines_generated_added", "lines_generated_deleted",
+    # Nature du travail (decompose "real" : code/docs/config/data). Compteurs
+    # numeriques uniquement, aucun chemin ni contenu.
+    "lines_code_added", "lines_code_deleted",
+    "lines_docs_added", "lines_docs_deleted",
+    "lines_config_added", "lines_config_deleted",
+    "lines_data_added", "lines_data_deleted",
     "block_count", "turn_count", "tool_call_count",
     "user_msg_count", "user_msg_counts", "assistant_turns",
     "api_turn_count", "marker_duration", "cwds_count",

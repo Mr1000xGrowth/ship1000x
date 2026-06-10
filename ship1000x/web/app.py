@@ -146,6 +146,36 @@ def _infer_audit_provider(source: str, model: str) -> str:
     return "anthropic"
 
 
+_UB_TOKEN_FIELDS = (
+    "fresh_input", "cache_read", "cache_write_5m", "cache_write_1h",
+    "output_tokens", "thinking", "reasoning",
+)
+_USAGE_TOKEN_FIELDS = (
+    "input_tokens", "output_tokens", "cached_input_tokens",
+    "cache_write_tokens", "reasoning_tokens",
+)
+
+
+def _event_total_tokens(meta: dict, row) -> int:
+    """Total LLM tokens for one event, read from raw_meta (the real source,
+    incl. cache) like the cost-models view — with a column fallback. The
+    top-level token_input/output columns hold only a fraction (no cache), so
+    summing them undercounts to ~0 for cache-heavy Claude usage.
+    """
+    ub = meta.get("usage_breakdown")
+    if isinstance(ub, dict) and ub:
+        return sum(int(ub.get(f) or 0) for f in _UB_TOKEN_FIELDS)
+    usage = meta.get("usage")
+    if isinstance(usage, dict):
+        tok = usage.get("tokens")
+        if isinstance(tok, dict) and tok:
+            return sum(int(tok.get(f) or 0) for f in _USAGE_TOKEN_FIELDS)
+    try:
+        return int(row["token_input"] or 0) + int(row["token_output"] or 0)
+    except (KeyError, IndexError, TypeError):
+        return 0
+
+
 def _cost_presentation(
     *,
     api_equivalent: float,
@@ -413,6 +443,143 @@ def create_app(db_path: Path, config_dir: Path) -> Flask:
             for r in rows
         ])
 
+    @app.route("/api/work-mix")
+    def api_work_mix():
+        """Production décomposée par nature de travail (code/docs/config/data).
+
+        Sert les 4 widgets : mix global, mix par projet, mix dans le temps,
+        ratio docs/code. Lit les compteurs de lignes déjà classés stockés dans
+        ``events.raw_meta`` (source=git). Volume seul, aucun facteur inventé
+        pour docs/config/data (pas de benchmark sourcé).
+        """
+        days = int(request.args.get("days", 30))
+        classes = ("code", "docs", "config", "data")
+        with storage.conn() as conn:
+            rows = conn.execute(
+                """SELECT date(started_at) AS day,
+                          COALESCE(project_id, '(unclassified)') AS project,
+                          COALESCE(SUM(CAST(json_extract(raw_meta, '$.lines_code_added') AS INTEGER)), 0) AS code,
+                          COALESCE(SUM(CAST(json_extract(raw_meta, '$.lines_docs_added') AS INTEGER)), 0) AS docs,
+                          COALESCE(SUM(CAST(json_extract(raw_meta, '$.lines_config_added') AS INTEGER)), 0) AS config,
+                          COALESCE(SUM(CAST(json_extract(raw_meta, '$.lines_data_added') AS INTEGER)), 0) AS data,
+                          COALESCE(SUM(CAST(json_extract(raw_meta, '$.lines_real_added') AS INTEGER)), 0) AS real_total
+                   FROM events
+                   WHERE source = 'git' AND started_at IS NOT NULL
+                     AND date(started_at) >= date('now', ? || ' days')
+                   GROUP BY day, project""",
+                (f"-{days}",),
+            ).fetchall()
+
+        global_mix = {c: 0 for c in classes}
+        global_real = 0
+        by_project: dict[str, dict[str, int]] = {}
+        by_day: dict[str, dict[str, int]] = {}
+        for r in rows:
+            global_real += int(r["real_total"] or 0)
+            proj = by_project.setdefault(r["project"], {c: 0 for c in classes})
+            day = by_day.setdefault(r["day"], {c: 0 for c in classes})
+            for c in classes:
+                v = int(r[c] or 0)
+                global_mix[c] += v
+                proj[c] += v
+                day[c] += v
+
+        classified = sum(global_mix.values())
+        pending = max(0, global_real - classified)
+
+        def _ratios(mix: dict[str, int]) -> dict:
+            total = sum(mix.values())
+            return {
+                "total": total,
+                "code_share_pct": round(mix["code"] / total * 100, 1) if total else 0.0,
+                # code_per_docs is the human-readable direction (>1 = more code
+                # than docs); docs_per_code kept for back-compat / doc-coverage.
+                "code_per_docs": round(mix["code"] / mix["docs"], 1) if mix["docs"] else None,
+                "docs_per_code": round(mix["docs"] / mix["code"], 2) if mix["code"] else None,
+            }
+
+        project_rows = sorted(
+            (
+                {"project": p, **m, **_ratios(m)}
+                for p, m in by_project.items()
+                if sum(m.values()) > 0
+            ),
+            key=lambda x: -x["total"],
+        )[:15]
+        day_rows = [{"date": d, **by_day[d]} for d in sorted(by_day.keys())]
+
+        return jsonify({
+            "schema_version": "ship1000x.dashboard.work_mix.v1",
+            "days": days,
+            "global": {
+                **global_mix,
+                "real_total": global_real,
+                "pending_reclassify": pending,
+                **_ratios(global_mix),
+            },
+            "by_project": project_rows,
+            "by_day": day_rows,
+        })
+
+    @app.route("/api/production-mode")
+    def api_production_mode():
+        """Interactive (subscription/OAuth) vs Programmatic (API key) lens.
+
+        Baseline capture: how much LLM production happened hand-piloted on a
+        subscription vs via a billable/automatable API route. Derived from the
+        already-collected ``auth_mode``. MEASURED only — the "with budget I'd
+        do N× more" projection belongs in the Estimate tab, not here.
+        """
+        from ship1000x.core.cost_truth import event_cost_truth, safe_raw_meta
+
+        days = int(request.args.get("days", 30))
+        mode_of = {"oauth": "interactive", "api_key": "programmatic", "unknown": "unknown"}
+        buckets = {
+            m: {"events": 0, "api_equivalent_usd": 0.0, "tokens": 0}
+            for m in ("interactive", "programmatic", "unknown")
+        }
+        with storage.conn() as conn:
+            rows = conn.execute(
+                """SELECT cost_estimated, token_input, token_output, raw_meta
+                   FROM events
+                   WHERE source NOT IN ('git', 'git_secret_alert')
+                     AND started_at IS NOT NULL
+                     AND date(started_at) >= date('now', ? || ' days')""",
+                (f"-{days}",),
+            ).fetchall()
+        for r in rows:
+            meta = safe_raw_meta(r["raw_meta"])
+            truth = event_cost_truth(
+                stored_cost=float(r["cost_estimated"] or 0.0),
+                meta=meta,
+                unknown_strategy="include_in_api_equivalent",
+            )
+            b = buckets[mode_of.get(truth.auth_mode, "unknown")]
+            b["events"] += 1
+            b["api_equivalent_usd"] += truth.api_equivalent_usd
+            b["tokens"] += _event_total_tokens(meta, r)
+
+        total_cost = sum(b["api_equivalent_usd"] for b in buckets.values())
+        total_tokens = sum(b["tokens"] for b in buckets.values())
+        for m, b in buckets.items():
+            b["api_equivalent_usd"] = round(b["api_equivalent_usd"], 2)
+            b["cost_share_pct"] = round(b["api_equivalent_usd"] / total_cost * 100, 1) if total_cost else 0.0
+            b["token_share_pct"] = round(b["tokens"] / total_tokens * 100, 1) if total_tokens else 0.0
+
+        return jsonify({
+            "schema_version": "ship1000x.dashboard.production_mode.v1",
+            "days": days,
+            "modes": buckets,
+            "totals": {"api_equivalent_usd": round(total_cost, 2), "tokens": total_tokens},
+            # The interactive share is today's hand-piloted subscription baseline.
+            # As programmatic (API/loops/workers) scales, its share climbs here.
+            "baseline_note": (
+                "Interactive = subscription, hand-piloted (today's ceiling, no "
+                "agentic parallelisation yet). Programmatic = billable API route, "
+                "automatable. Measured split; growth projections live in Estimate."
+            ),
+        })
+
     @app.route("/api/cost-models")
     def api_cost_models():
         """Coût + tokens par (provider, modèle) — vue complète et cohérente.
@@ -571,6 +738,8 @@ def create_app(db_path: Path, config_dir: Path) -> Flask:
                        source,
                        duration_sec AS sec,
                        cost_estimated,
+                       token_input,
+                       token_output,
                        raw_meta
                    FROM events
                    WHERE date(started_at) >= date('now', ? || ' days')
@@ -587,6 +756,7 @@ def create_app(db_path: Path, config_dir: Path) -> Flask:
                     "schema_version": "ship1000x.dashboard.project.v1",
                     "project_id": pid,
                     "total_sec": 0,
+                    "total_tokens": 0,
                     "total_cost": 0.0,
                     "cost_truth": {
                         "api_equivalent_usd": 0.0,
@@ -603,13 +773,15 @@ def create_app(db_path: Path, config_dir: Path) -> Flask:
             p = by_project[pid]
             sec = r["sec"] or 0
             n = 1
+            meta = safe_raw_meta(r["raw_meta"])
             cost = api_equivalent_cost_from_row(r)
             truth = event_cost_truth(
                 stored_cost=float(r["cost_estimated"] or 0.0),
-                meta=safe_raw_meta(r["raw_meta"]),
+                meta=meta,
                 unknown_strategy="include_in_api_equivalent",
             )
             p["total_sec"] += sec
+            p["total_tokens"] += _event_total_tokens(meta, r)
             p["total_cost"] += cost
             p["cost_truth"]["api_equivalent_usd"] += truth.api_equivalent_usd
             p["cost_truth"]["billed_estimated_usd"] += truth.billed_estimated_usd

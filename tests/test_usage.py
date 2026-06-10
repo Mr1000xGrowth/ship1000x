@@ -9,6 +9,7 @@ from ship1000x.core.usage import (
     build_unknown_usage_metadata,
     build_usage_metadata,
     canonicalize_model,
+    confidence_flag_from_usage,
 )
 
 
@@ -46,6 +47,87 @@ def test_build_usage_metadata_marks_native_tokens_factual():
     assert usage["quality"]["cost"] == "factual"
     assert usage["quality"]["active_time"] == "defensible"
     assert usage["provenance"]["pricing_model_canonical"] == "gpt-5-codex"
+
+
+def test_stale_pricing_downgrades_factual_cost_to_defensible():
+    """A2: when the local rate card is stale, a factual native-token cost is
+    downgraded to defensible (rates may have moved). The freshness signal flows
+    into the per-event confidence instead of staying in a sidecar command."""
+    from unittest import mock
+
+    with mock.patch(
+        "ship1000x.core.usage.pricing_freshness",
+        return_value={"version": PRICING_VERSION, "age_days": 200, "stale": True},
+    ):
+        usage = build_usage_metadata(
+            provider="openai",
+            client="codex-cli",
+            model_raw="gpt-5-codex-preview",
+            tokens=TokenBreakdown(input_tokens=1000, output_tokens=200),
+            cost_estimated=0.003,
+            cost_quality="factual",
+            token_source="codex_total_token_usage",
+        )
+
+    # Native tokens stay factual; only the cost confidence reflects staleness.
+    assert usage["quality"]["tokens"] == "factual"
+    assert usage["quality"]["cost"] == "defensible"
+    assert usage["cost"]["quality"] == "defensible"
+
+
+def test_confidence_flag_from_usage_reflects_measurement_not_attribution():
+    """A1: a fully-measured native-token event is high regardless of how it was
+    attributed to a project (attribution lives in project_conf, not here)."""
+    factual = build_usage_metadata(
+        provider="anthropic",
+        client="claude-code",
+        model_raw="claude-opus-4-8",
+        tokens=TokenBreakdown(input_tokens=1000, output_tokens=200),
+        cost_estimated=0.05,
+        cost_quality="factual",
+        token_source="native",
+    )
+    assert confidence_flag_from_usage(factual) == "high"
+
+
+def test_confidence_flag_from_usage_downgrades_on_weak_cost():
+    """Weakest-link: native tokens but indicative cost (e.g. unknown model
+    pricing) drags the flag down to low."""
+    usage = build_usage_metadata(
+        provider="anthropic",
+        client="claude-code",
+        model_raw="totally-unknown-model",
+        tokens=TokenBreakdown(input_tokens=1000, output_tokens=200),
+        cost_estimated=0.05,
+        cost_quality="indicative",
+        token_source="native",
+    )
+    assert confidence_flag_from_usage(usage) == "low"
+
+
+def test_confidence_flag_from_usage_ignores_active_time_heuristic():
+    """active_time is heuristic for every source; it must not cap an otherwise
+    factual token/cost event at medium."""
+    usage = build_usage_metadata(
+        provider="anthropic",
+        client="claude-code",
+        model_raw="claude-opus-4-8",
+        tokens=TokenBreakdown(input_tokens=1000, output_tokens=200),
+        cost_estimated=0.05,
+        cost_quality="factual",
+        active_time_quality="defensible",
+        token_source="native",
+    )
+    assert confidence_flag_from_usage(usage) == "high"
+
+
+def test_confidence_flag_from_usage_line_quality_for_git_like():
+    assert confidence_flag_from_usage({}, line_quality="factual") == "high"
+
+
+def test_confidence_flag_from_usage_defaults_medium_without_hard_dimensions():
+    assert confidence_flag_from_usage(None) == "medium"
+    assert confidence_flag_from_usage({"quality": {}}) == "medium"
 
 
 def test_build_unknown_usage_metadata_marks_missing_tokens_unknown():

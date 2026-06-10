@@ -1326,7 +1326,7 @@ def reclassify(ctx: click.Context, since: str, dry_run: bool, json_output: bool)
 
     A lancer apres :
       - mise a jour du CLI (nouveaux patterns dans line_classification.yaml)
-      - edition de config/line_classification.local.yaml
+      - edition de ~/.config/ship1000x/line_classification.local.yaml
       - changement de regles seed_threshold
     """
     storage = _get_storage()
@@ -2759,11 +2759,23 @@ def multiplier(since: str, project: str | None, tjm: float | None, value: float 
     console.print()
     console.print(f"[bold cyan]═══ Multiplicateur IA-native {project or 'global'} | {since} ═══[/bold cyan]")
     console.print()
-    console.print("[bold]Production[/bold]")
-    console.print(f"  Output reel      : {out['lines_per_hour']} lignes/h")
+    console.print("[bold]Production — code (base du facteur)[/bold]")
+    console.print(f"  Code / h         : {out['lines_per_hour']} lignes/h")
     console.print(f"  Benchmark senior : {out['benchmark_senior_low']}-{out['benchmark_senior_high']} lignes/h (sans IA)")
     console.print(f"  Facteur          : [cyan]x{out['factor_vs_senior_low']} → x{out['factor_vs_senior_high']}[/cyan] "
                   f"(mid x{out['factor_vs_senior_mid']})")
+
+    pb = m.get("production_breakdown")
+    if pb:
+        console.print()
+        console.print("[bold]Production — toutes natures (volume, sans facteur)[/bold]")
+        console.print(f"  Code             : {pb['code']:,} lignes".replace(",", " "))
+        console.print(f"  Docs             : {pb['docs']:,} lignes".replace(",", " "))
+        console.print(f"  Config           : {pb['config']:,} lignes".replace(",", " "))
+        console.print(f"  Donnees/contenu  : {pb['data']:,} lignes".replace(",", " "))
+        if pb.get("pending_reclassify"):
+            console.print("  [yellow]⚠ Decomposition indisponible — lance `ship1000x reclassify` "
+                          "(facteur calcule sur 'real' en attendant).[/yellow]")
     console.print()
     console.print(f"[bold]Valeur temps (TJM {m['inputs']['tjm_eur_per_day']} EUR/j, {m['inputs']['workday_hours']}h/j)[/bold]")
     console.print(f"  Temps actif      : {v['active_hours']}h = {v['days_equivalent']}j-equivalents")
@@ -2778,6 +2790,16 @@ def multiplier(since: str, project: str | None, tjm: float | None, value: float 
     console.print(f"  Par heure        : ${c['per_hour_usd'] or 0:.2f}/h")
     console.print(f"  Par commit       : ${c['per_commit_usd'] or 0:.2f}")
     console.print(f"  Par ligne nette  : ${c['per_line_net_usd'] or 0:.4f}")
+
+    conf = m.get("confidence")
+    if conf and conf.get("caveats"):
+        console.print()
+        console.print(
+            f"[dim]Base : lignes {conf.get('lines_basis', 'real')} (vrai code). "
+            "Caveats :[/dim]"
+        )
+        for caveat in conf["caveats"]:
+            console.print(f"[dim]  · {caveat}[/dim]")
 
 
 @cli.command()

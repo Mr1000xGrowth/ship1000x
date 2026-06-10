@@ -378,6 +378,7 @@ class TestDashboardSmoke(unittest.TestCase):
                 "total_hours",
                 "dominant_tool",
                 "commits",
+                "total_tokens",
                 "total_api_equivalent_cost",
                 "total_billed_estimated_cost",
                 "total_subscription_absorbed_cost",
@@ -397,6 +398,89 @@ class TestDashboardSmoke(unittest.TestCase):
             self.assertEqual(data[0]["cost_truth"]["api_equivalent_usd"], 15.0)
             self.assertEqual(data[0]["cost_truth"]["billed_estimated_usd"], 5.0)
             self.assertEqual(data[0]["cost_truth"]["subscription_absorbed_usd"], 10.0)
+
+    def test_api_work_mix_decomposes_real_lines(self):
+        s = Storage(self.db_path)
+        ts = datetime.now(timezone.utc).isoformat()
+        with s.conn() as c:
+            c.execute(
+                """INSERT INTO events
+                   (id, source, event_type, project_id, started_at, duration_sec,
+                    cost_estimated, confidence_flag, raw_meta, machine_id)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    "wm1", "git", "commit", "alpha", ts, 0, 0.0, "high",
+                    json.dumps({
+                        "lines_added": 1000, "lines_real_added": 1000,
+                        "lines_code_added": 600, "lines_docs_added": 300,
+                        "lines_config_added": 0, "lines_data_added": 100,
+                    }),
+                    "test",
+                ),
+            )
+        r = self._make_client().get("/api/work-mix?days=30")
+        self.assertEqual(r.status_code, 200)
+        d = r.get_json()
+        self.assertEqual(d["schema_version"], "ship1000x.dashboard.work_mix.v1")
+        g = d["global"]
+        self.assertEqual(g["code"], 600)
+        self.assertEqual(g["docs"], 300)
+        self.assertEqual(g["data"], 100)
+        self.assertEqual(g["code_share_pct"], 60.0)
+        self.assertEqual(g["docs_per_code"], 0.5)
+        self.assertEqual(g["pending_reclassify"], 0)
+        self.assertTrue(any(p["project"] == "alpha" for p in d["by_project"]))
+        self.assertTrue(d["by_day"])
+
+    def test_api_work_mix_never_exposes_paths_or_content(self):
+        data = self._make_client().get("/api/work-mix?days=30").get_json()
+        blob = json.dumps(data)
+        for forbidden in ("cwd", "raw_meta", "/Users", "diff", "prompt"):
+            self.assertNotIn(forbidden, blob)
+
+    def test_api_projects_tokens_read_from_raw_meta_not_columns(self):
+        # Regression: the bulk of tokens (esp. cache) lives in raw_meta, not the
+        # token_input/output columns. Summing columns undercounts to ~0.
+        s = Storage(self.db_path)
+        ts = datetime.now(timezone.utc).isoformat()
+        with s.conn() as c:
+            c.execute(
+                """INSERT INTO events
+                   (id, source, event_type, project_id, started_at, duration_sec,
+                    cost_estimated, token_input, token_output, confidence_flag,
+                    raw_meta, machine_id)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    "tok1", "claude_code", "session_day", "tokproj", ts, 60, 1.0,
+                    0, 0, "high",  # columns at 0 on purpose
+                    json.dumps({"usage_breakdown": {
+                        "fresh_input": 1000, "cache_read": 900000,
+                        "cache_write_5m": 40000, "output_tokens": 18000,
+                    }}),
+                    "test",
+                ),
+            )
+        data = self._make_client().get("/api/projects?days=30").get_json()
+        proj = next(p for p in data if p["project_id"] == "tokproj")
+        self.assertEqual(proj["total_tokens"], 959000)
+
+    def test_api_production_mode_splits_by_auth_route(self):
+        # setUp seeds e1 (auth_mode=api_key, api_equivalent 5.0) -> programmatic
+        # and e2 (codex_macapp, auth_mode=oauth, api_equivalent 10.0) -> interactive.
+        r = self._make_client().get("/api/production-mode?days=30")
+        self.assertEqual(r.status_code, 200)
+        d = r.get_json()
+        self.assertEqual(d["schema_version"], "ship1000x.dashboard.production_mode.v1")
+        m = d["modes"]
+        self.assertGreater(m["programmatic"]["api_equivalent_usd"], 0)
+        self.assertGreater(m["interactive"]["api_equivalent_usd"], 0)
+        for mode in ("interactive", "programmatic", "unknown"):
+            self.assertIn("cost_share_pct", m[mode])
+            self.assertIn("token_share_pct", m[mode])
+        # privacy boundary: aggregates only
+        blob = json.dumps(d)
+        for forbidden in ("raw_meta", "cwd", "/Users", "prompt", "diff"):
+            self.assertNotIn(forbidden, blob)
 
     def test_api_projects_uses_explicit_cost_truth_for_api_equivalent_total(self):
         s = Storage(self.db_path)

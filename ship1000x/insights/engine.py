@@ -142,6 +142,11 @@ def get_git_stats(storage, window: Window) -> dict[str, int]:
         "lines_seed_added": 0, "lines_seed_deleted": 0,
         "lines_vendored_added": 0, "lines_vendored_deleted": 0,
         "lines_generated_added": 0, "lines_generated_deleted": 0,
+        # Nature du travail (decompose "real") :
+        "lines_code_added": 0, "lines_code_deleted": 0,
+        "lines_docs_added": 0, "lines_docs_deleted": 0,
+        "lines_config_added": 0, "lines_config_deleted": 0,
+        "lines_data_added": 0, "lines_data_deleted": 0,
         "files_changed": 0,
     }
     for r in rows:
@@ -347,6 +352,15 @@ def compute_overview(storage, window: Window) -> dict[str, Any]:
             "lines_vendored_deleted": git["lines_vendored_deleted"],
             "lines_generated_added": git["lines_generated_added"],
             "lines_generated_deleted": git["lines_generated_deleted"],
+            # Nature du travail (decompose "real") — volume par classe :
+            "lines_code_added": git["lines_code_added"],
+            "lines_code_deleted": git["lines_code_deleted"],
+            "lines_docs_added": git["lines_docs_added"],
+            "lines_docs_deleted": git["lines_docs_deleted"],
+            "lines_config_added": git["lines_config_added"],
+            "lines_config_deleted": git["lines_config_deleted"],
+            "lines_data_added": git["lines_data_added"],
+            "lines_data_deleted": git["lines_data_deleted"],
             "files_changed": git["files_changed"],
             "tokens_input": tokens["input"],
             "tokens_output": tokens["output"],

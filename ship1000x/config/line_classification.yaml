@@ -69,3 +69,58 @@ seed:
   message_regex: "^\\s*(init|initial|scaffold|import|bootstrap|seed|first commit|template|fork)"
   # Premier commit d'un repo (git rev-list --max-parents=0) est TOUJOURS seed
   always_first_commit: true
+
+# Nature du travail (decoupe la categorie "real" par TYPE de production).
+# But : un facteur de levier compare le CODE a un benchmark de code, et les
+# docs / config / data sont reportes comme leur propre volume (jamais compares
+# a un rythme de codeur). `data` est le fallback pour toute extension absente.
+# Override local possible (ajoute des ext par classe) via line_classification.local.yaml.
+work_class:
+  code:
+    - ts
+    - tsx
+    - js
+    - jsx
+    - mjs
+    - cjs
+    - py
+    - go
+    - rs
+    - java
+    - kt
+    - rb
+    - php
+    - c
+    - cpp
+    - h
+    - cs
+    - swift
+    - scala
+    - sh
+    - sql
+    - css
+    - scss
+    - vue
+    - svelte
+    - prisma
+    - graphql
+    - proto
+  docs:
+    - md
+    - mdx
+    - rst
+    - txt
+    - adoc
+    - org
+    - tex
+  config:
+    - yaml
+    - yml
+    - toml
+    - ini
+    - cfg
+    - conf
+    - env
+    - properties
+    - xml
+  # data (fallback) : json, csv, srt, vtt, svg, html, ... — non liste ici.
