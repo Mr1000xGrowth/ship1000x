@@ -26,7 +26,6 @@ from typing import Any
 
 import yaml
 
-
 # Work-class taxonomy (orthogonal to real/seed/vendored/generated). It splits
 # the PRODUCTIVE ("real") lines by the NATURE of the work, so a leverage factor
 # can compare code against a code benchmark — and docs/config/data are reported
