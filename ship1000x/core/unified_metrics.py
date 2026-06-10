@@ -35,7 +35,7 @@ cross-sources). Chaque variante d'actif devient le MAX des deux mesures :
 Le resultat est destine a etre persiste dans la table daily_unified par
 core.rollup, puis lu directement par tracker.py et exporters/insights_push.
 
-Decision Charles 2026-05-15 : "B donne la meilleure data" -> on calcule
+Decision produit 2026-05-15 : "B donne la meilleure data" -> on calcule
 une seule fois en post-process, on stocke, tous les consumers lisent la
 meme valeur. Pas de recalcul a la volee.
 """
@@ -50,7 +50,6 @@ from typing import Any
 from ship1000x.core.cadence import HUMAN_CODES, get_cadence_profile
 from ship1000x.core.intervals import (
     _parse_iso_to_epoch,
-    union_active_sec_from_events,
     union_duration_sec,
 )
 from ship1000x.core.storage import Storage

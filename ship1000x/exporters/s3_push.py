@@ -23,7 +23,7 @@ def _slugify(raw: str) -> str:
     """Transforme un machine_id / hostname en slug safe pour path S3.
 
     "Mac-Studio.local" -> "mac-studio-local"
-    "Charles's MacBook Pro" -> "charles-s-macbook-pro"
+    "Jane's MacBook Pro" -> "jane-s-macbook-pro"
     """
     s = raw.strip().lower()
     s = re.sub(r"[^a-z0-9]+", "-", s)

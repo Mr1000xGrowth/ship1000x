@@ -1224,7 +1224,7 @@ def rollup(since: str):
     console.print(f"[green]✓[/green] Rollups : {stats['rollups_created']} lignes sur {stats['days']} jours")
 
     # Refresh du profil de cadence (distribution des deltas perso) — sert au
-    # cap auto par-user cote dashboard. Decision Charles 2026-04-25.
+    # cap auto par-user cote dashboard. Decision produit 2026-04-25.
     privacy_config = _load_yaml(PRIVACY_CONFIG)
     consent = (privacy_config.get("consent") or {})
     user_email = consent.get("user_email", "unknown@local")
