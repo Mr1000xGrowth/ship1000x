@@ -122,3 +122,34 @@ def test_collect_writes_safe_claude_usage_metadata(monkeypatch):
         assert usage["provenance"]["token_source"] == "claude_message_usage"
         assert "prompt" not in json.dumps(meta).lower()
         assert "response" not in json.dumps(meta).lower()
+
+
+def test_collect_handles_session_file_outside_home(monkeypatch):
+    """Regression: a Claude session file living outside HOME (external volume,
+    symlink, custom CLAUDE_CONFIG_DIR) must not crash collect(). relative_to()
+    raises there, so the collector falls back to the absolute path as its
+    ingestion key. fake_home is a separate dir the session file is never under."""
+    with TemporaryDirectory() as home_dir, TemporaryDirectory() as sess_dir:
+        fake_home = Path(home_dir)
+        session_file = Path(sess_dir) / "claude-project" / "session.jsonl"
+        _write_session(session_file)
+        monkeypatch.setattr(claude_code.Path, "home", staticmethod(lambda: fake_home))
+
+        db_path = fake_home / "tracker.sqlite"
+        storage = Storage(db_path)
+        storage.init_schema()
+        classifier = Classifier.from_yaml_config(
+            {
+                "projects": [
+                    {
+                        "id": "demo-project",
+                        "paths": [str(session_file.parent) + "/*"],
+                    }
+                ]
+            }
+        )
+        monkeypatch.setattr(claude_code, "iter_session_files", lambda: iter([session_file]))
+
+        stats = claude_code.collect(storage, classifier, {})
+
+        assert stats["events_ingested"] == 1

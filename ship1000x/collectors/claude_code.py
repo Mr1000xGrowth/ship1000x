@@ -607,7 +607,15 @@ def collect(storage, classifier, privacy_config: dict[str, Any]) -> dict[str, in
 
     for jsonl_path in iter_session_files():
         stats["files_seen"] += 1
-        file_key = str(jsonl_path.relative_to(Path.home()))
+        # Stable ingestion key. Usually under ~/.claude, so we key on the
+        # home-relative path; but a session file can legitimately live outside
+        # HOME (external volume, symlink, custom CLAUDE_CONFIG_DIR) — there
+        # relative_to() raises, so fall back to the absolute path. Either way
+        # the key is stable per file, which is all idempotence needs.
+        try:
+            file_key = str(jsonl_path.relative_to(Path.home()))
+        except ValueError:
+            file_key = str(jsonl_path)
 
         # Skip si deja ingere (idempotence)
         file_size = jsonl_path.stat().st_size
