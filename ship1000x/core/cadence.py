@@ -5,7 +5,7 @@ Permet a chaque user d'avoir un cap auto calé sur SA realite plutot qu'un
 cap arbitraire universel. Le 95e percentile est le default recommande
 (capture 95% de l'activite, coupe 5% comme pauses).
 
-Decision Charles 2026-04-25 : "stop les approximations, on fait exact"
+Decision produit 2026-04-25 : "stop les approximations, on fait exact"
 appliquee aussi au choix du cap.
 """
 

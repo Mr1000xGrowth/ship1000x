@@ -210,7 +210,6 @@ class TestDashboardSmoke(unittest.TestCase):
         forbidden = {"content", "text", "message", "prompt", "response",
                      "diff", "command", "input", "output"}
         for ev in data["events"]:
-            blob = json.dumps(ev)
             ub = ev.get("usage_breakdown") or {}
             for k in forbidden:
                 self.assertNotIn(k, ub)

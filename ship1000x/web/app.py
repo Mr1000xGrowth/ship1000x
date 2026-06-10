@@ -27,7 +27,6 @@ from ship1000x.core.pricing import pricing_freshness, resolve_model_pricing
 from ship1000x.core.usage import canonicalize_model
 from ship1000x.core.usage import format_token_count as _fmt_tok
 
-
 # Client (app vs CLI) derivation for the audit log. For Claude the client is
 # already distinguishable from `source`; for Codex everything collapses into
 # source='codex' and only the rollout `originator` (opt-in, allowlisted) tells
@@ -446,7 +445,7 @@ def create_app(db_path: Path, config_dir: Path) -> Flask:
             ).fetchall()
 
         by_model: dict[tuple, dict] = {}
-        total_api = total_billed = total_hourly = total_metadata = 0.0
+        total_api = total_billed = total_hourly = 0.0
         for r in rows:
             meta = safe_raw_meta(r["raw_meta"])
             usage = meta.get("usage") if isinstance(meta.get("usage"), dict) else {}
@@ -534,10 +533,11 @@ def create_app(db_path: Path, config_dir: Path) -> Flask:
             f"{m['provider']}/{m['model']}" for m in models
             if m["pricing_quality"] != "exact"
         ]
-        from ship1000x.core.pricing import PRICING_VERSION
         # Shared daily axis for the whole window so per-model sparklines line up
         # (zero-filled on inactive days) and clearly track the selected period.
         from datetime import date, timedelta
+
+        from ship1000x.core.pricing import PRICING_VERSION
         today = date.today()
         date_axis = [(today - timedelta(days=i)).isoformat() for i in range(days, -1, -1)]
         return jsonify({
