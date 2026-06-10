@@ -67,3 +67,9 @@ logs/
 # Ruff / mypy
 .ruff_cache/
 .mypy_cache/
+
+# Internal agent memory / scaffolding (workspace-local, never public)
+.agent-memory/
+.codex/
+AGENTS.md
+CLAUDE.md
