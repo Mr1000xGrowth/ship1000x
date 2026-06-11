@@ -73,3 +73,6 @@ logs/
 .codex/
 AGENTS.md
 CLAUDE.md
+
+# Local pyenv pin (launcher convenience, not for CI)
+.python-version
