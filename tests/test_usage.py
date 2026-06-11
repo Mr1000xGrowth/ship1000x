@@ -127,6 +127,22 @@ def test_confidence_flag_from_usage_line_quality_for_git_like():
 
 def test_confidence_flag_from_usage_defaults_medium_without_hard_dimensions():
     assert confidence_flag_from_usage(None) == "medium"
+
+
+def test_confidence_flag_a1cont_token_less_source_is_low():
+    """A1-cont: the exact path token-less collectors (cursor, cline,
+    codex_macapp) now use — build_unknown_usage_metadata fed to the helper —
+    yields 'low', never 'high'. No native tokens + estimated/unknown cost must
+    not read as a measured event, regardless of project attribution."""
+    for cost_quality in ("indicative", "unknown"):
+        usage = build_unknown_usage_metadata(
+            provider="unknown",
+            client="cursor-ai-tracking",
+            model_raw=None,
+            cost_estimated=0.0,
+            cost_quality=cost_quality,
+        )
+        assert confidence_flag_from_usage(usage) == "low"
     assert confidence_flag_from_usage({"quality": {}}) == "medium"
 
 

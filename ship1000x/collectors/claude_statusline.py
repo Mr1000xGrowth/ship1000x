@@ -166,7 +166,10 @@ def collect(storage, classifier, privacy_config: dict[str, Any]) -> dict[str, in
                 "cost_estimated": 0.0,
                 "user_msg_type": None,
                 "wordcount": 0,
-                "confidence_flag": "high" if conf >= 0.8 else "medium",
+                # A1-cont: a statusline tick measures no tokens and no cost, so
+                # its confidence must not ride on project attribution (kept in
+                # project_conf). No hard measured dimension → medium, never high.
+                "confidence_flag": "medium",
                 "raw_meta": json.dumps({
                     "session_id": session_id[:36],
                     "model": dominant_model,

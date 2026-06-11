@@ -36,7 +36,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from ship1000x.core.usage import build_unknown_usage_metadata
+from ship1000x.core.usage import (
+    build_unknown_usage_metadata,
+    confidence_flag_from_usage,
+)
 
 CODEX_LOGS_DIR = Path.home() / "Library" / "Logs" / "com.openai.codex"
 # Codex Desktop logs SQLite store. Holds OTEL spans tagged with the
@@ -568,9 +571,10 @@ def collect(
                     "cost_estimated": cost_estimated,
                     "user_msg_type": None,
                     "wordcount": 0,
-                    "confidence_flag": (
-                        "high" if cwds and ratio >= 0.5 else "medium"
-                    ),
+                    # A1-cont: flag reflects MEASUREMENT quality (no native
+                    # tokens, hourly-estimate cost = indicative) → not the
+                    # project attribution. Attribution stays in project_conf.
+                    "confidence_flag": confidence_flag_from_usage(usage),
                     "raw_meta": json.dumps(
                         {
                             "session_uuid": parsed["session_uuid"],

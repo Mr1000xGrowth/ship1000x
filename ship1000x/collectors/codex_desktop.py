@@ -43,6 +43,7 @@ from ship1000x.core.usage import (
     TokenBreakdown,
     build_unknown_usage_metadata,
     build_usage_metadata,
+    confidence_flag_from_usage,
 )
 
 CODEX_STATE_DB = Path.home() / ".codex" / "logs_2.sqlite"
@@ -624,7 +625,10 @@ def collect(storage, classifier, privacy_config: dict[str, Any]) -> dict[str, in
                     "cost_estimated": cost_estimated,
                     "user_msg_type": None,
                     "wordcount": 0,
-                    "confidence_flag": "high" if paths_filtered and ratio >= 0.5 else "medium",
+                    # A1-cont: flag from MEASUREMENT quality (factual when real
+                    # tokens were parsed, low on the hourly-estimate fallback),
+                    # not project attribution (kept in project_conf).
+                    "confidence_flag": confidence_flag_from_usage(usage),
                     "raw_meta": json.dumps({
                         "process_uuid": process_uuid,
                         "turn_count": d["turns"],

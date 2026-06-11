@@ -18,7 +18,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from ship1000x.core.usage import build_unknown_usage_metadata
+from ship1000x.core.usage import (
+    build_unknown_usage_metadata,
+    confidence_flag_from_usage,
+)
 
 CURSOR_DB = Path.home() / ".cursor" / "ai-tracking" / "ai-code-tracking.db"
 # Marker pour dire "cet event est un proxy, pas une mesure de temps"
@@ -120,6 +123,14 @@ def collect(storage, classifier, privacy_config: dict[str, Any]) -> dict[str, in
         started = datetime.fromtimestamp(agg["first_ts"] / 1000, tz=timezone.utc).isoformat()
         ended = datetime.fromtimestamp(agg["last_ts"] / 1000, tz=timezone.utc).isoformat()
 
+        usage = build_unknown_usage_metadata(
+            provider="unknown",
+            client="cursor-ai-tracking",
+            model_raw=None,
+            cost_estimated=0.0,
+            cost_quality="unknown",
+            cost_basis="not_exposed_by_ai_tracking_db",
+        )
         event = {
             "id": _stable_event_id(day, project_id, "ai_blocks"),
             "source": "cursor",
@@ -136,20 +147,15 @@ def collect(storage, classifier, privacy_config: dict[str, Any]) -> dict[str, in
             "cost_estimated": 0.0,
             "user_msg_type": None,
             "wordcount": 0,
-            "confidence_flag": "high" if agg["project_conf"] >= 0.8 else "medium",
+            # A1-cont: no native tokens, cost unknown → measurement quality is
+            # low. The project attribution stays in project_conf, separately.
+            "confidence_flag": confidence_flag_from_usage(usage),
             "raw_meta": json.dumps({
                 "block_count": agg["block_count"],
                 "file_count": agg["file_count"],
                 "extensions": sorted(agg["extensions"]),
                 "marker_duration": True,  # Flag : duration n'est pas mesure de temps
-                "usage": build_unknown_usage_metadata(
-                    provider="unknown",
-                    client="cursor-ai-tracking",
-                    model_raw=None,
-                    cost_estimated=0.0,
-                    cost_quality="unknown",
-                    cost_basis="not_exposed_by_ai_tracking_db",
-                ),
+                "usage": usage,
             }),
         }
         safe = sanitize_event(event)

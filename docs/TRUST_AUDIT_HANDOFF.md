@@ -59,12 +59,12 @@ Le filtre `share_config` ne protège pas le multiplicateur : `factor_vs_senior` 
 | Axe | Détail | Effort | Statut |
 |---|---|---|---|
 | **A1** | `confidence_flag` → branché sur `usage.quality` pour `claude_code`/`codex`/`git` ; `project_conf` reste séparé. Helper `confidence_flag_from_usage` dans `core/usage.py`. | Moyen + re-backfill `reclassify` | ✅ fait (scope 3 sources) |
-| **A1-cont** | Étendre aux sources token-less : `cursor`, `cline`, `codex_macapp`, `codex_desktop`, `claude_statusline`, `openclaw`. Choix de conception : un coût/token `unknown`/`indicative` doit-il faire tomber le flag à `low` (honnête) ou la source garde-t-elle `medium` sur son `active_time` ? | Moyen | à décider |
+| **A1-cont** | Sources token-less routées via `confidence_flag_from_usage` : `codex_macapp`/`cursor`/`cline` → `low` (coût `indicative`/`unknown`, pas de tokens natifs), `codex_desktop` → qualité de mesure (factual si tokens parsés, sinon `low`), `claude_statusline` → `medium` (aucune dimension dure). Décision retenue : `low` honnête, jamais `high` par attribution. `openclaw` **différé** : il mesure de vrais tokens mais sans `usage` normalisée — le mettre à `medium` le sous-évaluerait ; lui construire un `usage` est un changement séparé. | Moyen + re-backfill | ✅ fait (openclaw différé) |
 | **A2** | Câbler `pricing_freshness().stale` dans le downgrade `cost_quality` (`usage.py`). | Faible | ✅ fait |
 | **A3** | Marquer « hypothèse interne » le benchmark `lines_per_hour_no_ai` (`benchmarks.py`) — dénominateur du facteur exporté. | Faible | ✅ fait |
 | **A6** | Décomposition de la production par nature de travail (code/docs/config/data). Le facteur de levier ne compare que le **code** au benchmark code ; docs/config/data reportés en volume. `work_class` dans `line_classifier` + `production_breakdown` dans `multiplier`. | Moyen + re-backfill | ✅ fait |
 | **A4** | `quality_for_tokens` granulaire (cache manquant → `defensible`). Capture déjà OK (Wave 4) ; seul le label est grossier. | Moyen | à faire |
-| **A5** | Repondérer le score global autrement que par `event_count` brut. Conception, pas bug. | Conception | à faire |
+| **A5** | Score global pondéré par le **coût API-equivalent** au lieu de `event_count` brut → les sources $0 à fort volume (git) ne dominent plus ; fallback event_count si aucun coût observé. `score_by_events` conservé en vue couverture. | Conception | ✅ fait |
 
 ## Ordre de remédiation
 

@@ -28,7 +28,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from ship1000x.core.usage import build_unknown_usage_metadata
+from ship1000x.core.usage import (
+    build_unknown_usage_metadata,
+    confidence_flag_from_usage,
+)
 
 CLINE_TASKS_DIR = (
     Path.home()
@@ -236,6 +239,14 @@ def collect(storage, classifier, privacy_config: dict[str, Any]) -> dict[str, in
             conf_used = 0.80
 
         for project_id, ratio in distribution.items():
+            usage = build_unknown_usage_metadata(
+                provider=_provider_for_model(parsed["model"]),
+                client="cline",
+                model_raw=parsed["model"],
+                cost_estimated=0.0,
+                cost_quality="unknown",
+                cost_basis="not_exposed_by_task_metadata",
+            )
             event = {
                 "id": _stable_event_id(parsed["task_id"], project_id),
                 "source": "cline",
@@ -253,7 +264,9 @@ def collect(storage, classifier, privacy_config: dict[str, Any]) -> dict[str, in
                 "cost_estimated": 0.0,
                 "user_msg_type": None,
                 "wordcount": 0,
-                "confidence_flag": "high" if conf_used >= 0.8 else "medium",
+                # A1-cont: no native tokens, cost unknown → measurement quality
+                # is low. Project attribution stays in project_conf, separately.
+                "confidence_flag": confidence_flag_from_usage(usage),
                 "raw_meta": json.dumps({
                     "task_id": parsed["task_id"],
                     "model": parsed["model"],
@@ -262,14 +275,7 @@ def collect(storage, classifier, privacy_config: dict[str, Any]) -> dict[str, in
                     "api_turn_count": parsed["api_turn_count"],
                     "user_msg_count": parsed["user_msg_count"],
                     "split_ratio": round(ratio, 3),
-                    "usage": build_unknown_usage_metadata(
-                        provider=_provider_for_model(parsed["model"]),
-                        client="cline",
-                        model_raw=parsed["model"],
-                        cost_estimated=0.0,
-                        cost_quality="unknown",
-                        cost_basis="not_exposed_by_task_metadata",
-                    ),
+                    "usage": usage,
                 }),
             }
             safe = sanitize_event(event)
