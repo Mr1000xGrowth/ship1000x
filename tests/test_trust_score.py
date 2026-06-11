@@ -287,5 +287,51 @@ class TestComputeGlobalScore(unittest.TestCase):
         self.assertTrue(chk["passed"])
 
 
+class TestCostWeightedGlobalScore(unittest.TestCase):
+    """A5: the headline weights sources by API-equivalent cost, not event count,
+    so a high-volume $0 source (git) cannot dominate. Falls back to event
+    weighting when no cost is observed."""
+
+    def setUp(self):
+        self._tmpdir = TemporaryDirectory()
+        self.db_path = Path(self._tmpdir.name) / "test.sqlite"
+        self.storage = Storage(self.db_path)
+        self.storage.init_schema()
+
+    def tearDown(self):
+        self._tmpdir.cleanup()
+
+    def _insert(self, source: str, confidence: str, n: int, cost: float):
+        ts = datetime.now(timezone.utc).isoformat()
+        with self.storage.conn() as c:
+            for i in range(n):
+                c.execute(
+                    """INSERT INTO events
+                       (id, source, event_type, started_at, confidence_flag,
+                        cost_estimated, machine_id)
+                       VALUES (?, ?, 'session', ?, ?, ?, 'test')""",
+                    (f"{source}-{confidence}-{i}", source, ts, confidence, cost),
+                )
+
+    def test_zero_cost_source_does_not_dominate(self):
+        # git: 10 high events but $0 ; codex: 2 low events but priced.
+        self._insert("git", "high", n=10, cost=0.0)
+        self._insert("codex", "low", n=2, cost=25.0)
+        result = compute_global_score(self.storage)
+        # Cost-weighted: git weight 0 → score reflects codex only (low = 40).
+        self.assertEqual(result["weighting"], "cost")
+        self.assertEqual(result["score"], 40)
+        # Volume view still reported, and it would have been inflated by git.
+        self.assertEqual(result["score_by_events"], 90)
+
+    def test_falls_back_to_event_weighting_without_cost(self):
+        self._insert("claude_code", "high", n=10, cost=0.0)
+        self._insert("git", "high", n=10, cost=0.0)
+        result = compute_global_score(self.storage)
+        self.assertEqual(result["weighting"], "event_count")
+        self.assertEqual(result["score"], 100)
+        self.assertEqual(result["score"], result["score_by_events"])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -4,8 +4,11 @@ See docs/TRUST_SCORE.md for the full methodology.
 
 Each event carries a `confidence_flag` (high/medium/low) set by its collector.
 The per-source score is a weighted average over the window. The global
-composite is the raw weighted average of source scores. Robustness checks report
-setup gaps separately, including source quality audit gaps.
+composite weights each source by its API-equivalent cost (not raw event count)
+so cost-free, high-volume sources like git can't dominate a score that backs
+cost/value claims; it falls back to event weighting when no cost is observed.
+`score_by_events` keeps the volume-weighted view for coverage. Robustness checks
+report setup gaps separately, including source quality audit gaps.
 
 The Trust Score is Ship1000x's main differentiator: every metric exposes
 its own confidence rather than presenting all numbers as equally reliable.
@@ -53,11 +56,16 @@ def compute_source_score(
 def get_all_source_scores(
     storage: Storage, window_days: int = 30,
 ) -> dict[str, dict]:
-    """Returns {source: {score, event_count}} for all sources active in window."""
+    """Returns {source: {score, event_count, cost}} for sources active in window.
+
+    ``cost`` is the summed API-equivalent ``cost_estimated`` over the window —
+    used as the global weighting basis so a source that emits many $0 events
+    (git commits) cannot dominate a score meant to back cost/value claims.
+    """
     with storage.conn() as conn:
         rows = conn.execute(
             """
-            SELECT source, COUNT(*) AS n
+            SELECT source, COUNT(*) AS n, COALESCE(SUM(cost_estimated), 0) AS cost
             FROM events
             WHERE date(started_at) >= date('now', ? || ' days')
             GROUP BY source
@@ -70,6 +78,7 @@ def get_all_source_scores(
         out[r["source"]] = {
             "score": compute_source_score(storage, r["source"], window_days),
             "event_count": r["n"],
+            "cost": max(float(r["cost"] or 0.0), 0.0),
         }
     return out
 
@@ -102,11 +111,27 @@ def compute_global_score(
             "robustness_checks": [],
         }
 
-    weighted_sum = sum(
-        s["score"] * s["event_count"] for s in source_scores.values()
-    )
+    # Headline weights each source by its API-equivalent cost, not raw event
+    # volume: otherwise a source emitting thousands of $0 events (git commits)
+    # dominates a score meant to back cost/value claims. Fall back to event
+    # weighting when no cost is observed yet (fresh setup, cost-free sources),
+    # so the score stays meaningful before any priced usage lands.
     total_events = sum(s["event_count"] for s in source_scores.values())
-    score = weighted_sum // total_events if total_events else 0
+    total_cost = sum(s["cost"] for s in source_scores.values())
+    score_by_events = (
+        sum(s["score"] * s["event_count"] for s in source_scores.values())
+        // total_events
+        if total_events
+        else 0
+    )
+    if total_cost > 0:
+        weighting = "cost"
+        score = round(
+            sum(s["score"] * s["cost"] for s in source_scores.values()) / total_cost
+        )
+    else:
+        weighting = "event_count"
+        score = score_by_events
     label, _ = get_score_label(score)
 
     checks: list[dict] = []
@@ -182,6 +207,8 @@ def compute_global_score(
     return {
         "score": score,
         "label": label,
+        "weighting": weighting,
+        "score_by_events": score_by_events,
         "breakdown": source_scores,
         "robustness_checks": checks,
     }
