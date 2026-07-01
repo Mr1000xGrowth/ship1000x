@@ -532,7 +532,12 @@ async function loadTrend(days) {
           },
         },
         scales: {
-          x: { ticks: { color: textColor, font: { size: 10 } }, grid: { color: gridColor, display: false }, border: { display: false } },
+          x: {
+            // 1 tick = 1 jour, TOUJOURS : chaque jour affiche son label (autoSkip off).
+            // Les labels pivotent au besoin pour tenir sur les longues periodes.
+            ticks: { color: textColor, font: { size: 10 }, autoSkip: false, maxRotation: 90, minRotation: 0 },
+            grid: { color: gridColor, display: false }, border: { display: false },
+          },
           y: { ticks: { color: textColor, font: { size: 10 } }, grid: { color: gridColor }, border: { display: false }, beginAtZero: true },
         },
       },
@@ -780,7 +785,11 @@ async function loadWorkMix(days) {
           tooltip: { backgroundColor: isDark ? '#0a0a0b' : '#fafaf9', titleColor: isDark ? '#fafaf9' : '#0a0a0b', bodyColor: textColor, borderColor: gridColor, borderWidth: 1, padding: 10 },
         },
         scales: {
-          x: { stacked: true, ticks: { color: textColor, font: { size: 10 } }, grid: { display: false }, border: { display: false } },
+          x: {
+            stacked: true,
+            ticks: { color: textColor, font: { size: 10 }, autoSkip: false, maxRotation: 90, minRotation: 0 },
+            grid: { display: false }, border: { display: false },
+          },
           y: { stacked: true, ticks: { color: textColor, font: { size: 10 } }, grid: { color: gridColor }, border: { display: false }, beginAtZero: true },
         },
       },
