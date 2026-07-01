@@ -147,6 +147,23 @@ def _extract_paths(line: str) -> list[str]:
     return _PATH_RE.findall(line)
 
 
+# Codex.app logue parfois un cwd=<racine du workspace> au lancement de l'app
+# (ex: "/Users/.../Developer") plutot qu'un cwd par conversation/projet. Ce
+# cwd est TROP GENERIQUE pour classer : aucun pattern de projet ne le matche,
+# donc l'inclure dans le vote pondere (cwds*3) ne fait que diluer le vrai
+# signal (les paths de fichiers reels, eux precis) sans jamais l'emporter.
+_WORKSPACE_ROOT_PLACEHOLDERS = {
+    str(Path.home() / "Developer").rstrip("/"),
+    "~/Developer",
+}
+
+
+def _is_workspace_root_placeholder(cwd: str) -> bool:
+    """Vrai si le cwd n'est que la racine generique du workspace (aucun
+    sous-dossier de projet) -- signal quasi inutile pour la classification."""
+    return cwd.rstrip("/") in _WORKSPACE_ROOT_PLACEHOLDERS
+
+
 def _segmented_wall_clock(timestamps: list[float]) -> int:
     """Somme des intervalles entre events < SEGMENT_GAP_SEC (30 min)."""
     if len(timestamps) < 2:
@@ -460,9 +477,27 @@ def collect(
             continue
         stats["files_parsed"] += 1
 
-        # Classification project_id : priorite au cwd (plus fiable que fallback)
-        cwds = [c for c in parsed["cwds"] if not is_excluded_path(c, exclude_paths)]
-        paths = [p for p in parsed["paths"] if not is_excluded_path(p, exclude_paths)]
+        # Classification project_id : priorite au cwd (plus fiable que fallback),
+        # SAUF quand ce cwd n'est que la racine generique du workspace -- dans ce
+        # cas il n'apporte aucune info de projet et on se rabat sur les paths reels.
+        cwds = [
+            c for c in parsed["cwds"]
+            if not is_excluded_path(c, exclude_paths) and not _is_workspace_root_placeholder(c)
+        ]
+        # Meme filtre applique aux paths bruts : `_extract_paths` scanne la
+        # ligne entiere avec une regex generique et capture donc AUSSI le
+        # `cwd=<racine workspace>` des lignes de log internes (ex: polling
+        # git status/config en arriere-plan de l'app), qui se repete des
+        # dizaines/centaines de fois par fichier. Sans ce filtre, ce
+        # placeholder domine numeriquement `paths` et l'auto-resolve git
+        # (paths_distribution pass 3) le classe vers le repo git de
+        # ~/Developer lui-meme plutot que vers le vrai projet travaille,
+        # noyant le signal reel (bug observe 2026-07-01 : Sabaca a moins
+        # de 5 hits reels contre 170+ hits du placeholder par fichier).
+        paths = [
+            p for p in parsed["paths"]
+            if not is_excluded_path(p, exclude_paths) and not _is_workspace_root_placeholder(p)
+        ]
         parsed_jobs.append((log_file, mtime_ns, parsed, cwds, paths))
 
     # Phase 2 — resolve the coding model for every conversationId we

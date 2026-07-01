@@ -345,19 +345,7 @@ class Classifier:
              comme `/Users/<username>/Projects/my-app`)
         """
         counts: dict[str, int] = {}
-
-        # Precompute les markers par rule (id + segment distinctif des patterns)
-        markers_by_rule: dict[str, list[str]] = {}
-        for rule in self.rules:
-            markers: list[str] = [rule.id]
-            for pattern in rule.paths:
-                # Extrait le segment "nommant" le projet dans le glob
-                # ("*/my-project/*" -> "my-project")
-                for segment in pattern.split("/"):
-                    if segment and segment != "*" and "*" not in segment:
-                        if segment not in markers:
-                            markers.append(segment)
-            markers_by_rule[rule.id] = markers
+        markers_by_rule = self._markers_by_rule()
 
         for path in paths:
             matched = False
@@ -394,6 +382,64 @@ class Classifier:
         if total == 0:
             return {}
         return {pid: n / total for pid, n in counts.items()}
+
+    # Segments de chemin trop generiques pour servir de marker de substring
+    # fallback : ils apparaissent dans le chemin de N'IMPORTE QUEL projet
+    # sous le home directory (racine workspace, home dir lui-meme, dossiers
+    # systeme macOS courants). Sans cette liste noire, un pattern comme
+    # "~/Developer/vantacrew/vantacrew-console*" produit le marker "Developer"
+    # (segment non-wildcard du glob), qui matche alors TOUS les projets de
+    # Charles en pass 2 -- empechant pass 3 (auto-resolve git, qui aurait
+    # correctement classe vers le vrai projet) de jamais s'executer.
+    # Bug reel observe 2026-06-30/07-01 : Sabaca (842 commits git sur 2
+    # semaines) classait a 100% vers vantacrew-console a cause de ce marker.
+    _GENERIC_MARKER_BLOCKLIST = {
+        "~",
+        "developer",
+        "users",
+        "desktop",
+        "documents",
+        "downloads",
+        "library",
+        "projects",
+        "code",
+        "src",
+        "clients",
+        "repos",
+        "workspace",
+        "home",
+    }
+
+    def _markers_by_rule(self) -> dict[str, list[str]]:
+        """Precompute les markers par rule (id + segment distinctif des patterns).
+
+        Le marker est UNIQUEMENT le dernier segment non-wildcard de chaque
+        pattern (le nom du projet), jamais les segments parents generiques
+        (voir `_GENERIC_MARKER_BLOCKLIST`).
+        """
+        markers_by_rule: dict[str, list[str]] = {}
+        for rule in self.rules:
+            markers: list[str] = [rule.id]
+            for pattern in rule.paths:
+                # N'extrait QUE le DERNIER segment non-wildcard du glob comme
+                # marker ("~/Developer/vantacrew/vantacrew-console*" ->
+                # "vantacrew-console", pas "Developer" ni "vantacrew"). C'est
+                # le segment qui nomme reellement le projet ; les segments
+                # parents sont des dossiers d'organisation partages par
+                # d'autres projets et ne doivent jamais servir de marker.
+                segments = [
+                    s for s in pattern.split("/")
+                    if s and s != "*" and "*" not in s
+                ]
+                if segments:
+                    last = segments[-1]
+                    if (
+                        last not in markers
+                        and last.lower() not in self._GENERIC_MARKER_BLOCKLIST
+                    ):
+                        markers.append(last)
+            markers_by_rule[rule.id] = markers
+        return markers_by_rule
 
     def classify_keywords(self, title: str | None) -> tuple[str | None, float]:
         """Fallback keywords sur titre de session."""
