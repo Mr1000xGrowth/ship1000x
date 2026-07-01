@@ -252,11 +252,20 @@ def _wall_clock_sec(first_ts: str | None, last_ts: str | None) -> int:
     return max(0, int(delta))
 
 
-def _estimate_cost(model: str, tok_in: int, tok_out: int, cache_read: int = 0, cache_write: int = 0) -> float:
+def _estimate_cost(
+    model: str,
+    tok_in: int,
+    tok_out: int,
+    cache_read: int = 0,
+    cache_write: int = 0,
+    cache_discount: bool = True,
+) -> float:
     """Cout approximatif USD based on tokens.
 
     Delegue a core.pricing.estimate_anthropic_cost pour coherence avec
-    codex.py et mise a jour centralisee des tarifs.
+    codex.py et mise a jour centralisee des tarifs. `cache_discount=False`
+    calcule le cout comme si la remise de cache Anthropic ne s'appliquait
+    pas (borne haute, cf core.pricing).
     """
     from ship1000x.core.pricing import estimate_anthropic_cost
     return estimate_anthropic_cost(
@@ -265,6 +274,7 @@ def _estimate_cost(model: str, tok_in: int, tok_out: int, cache_read: int = 0, c
         tokens_output=tok_out,
         cache_read_tokens=cache_read,
         cache_write_tokens=cache_write,
+        cache_discount=cache_discount,
     )
 
 
@@ -296,6 +306,7 @@ def _build_daily_usage_metadata(day_stats: dict[str, Any], ratio: float) -> dict
     cache_read = int(day_stats.get("cache_read_tokens", 0) * ratio)
     cache_write = int(day_stats.get("cache_write_tokens", 0) * ratio)
     cost = float(day_stats.get("cost", 0.0) * ratio)
+    cost_no_cache = float(day_stats.get("cost_no_cache", 0.0) * ratio)
     has_native_tokens = any((input_uncached, output_tokens, cache_read, cache_write))
     # entrypoint is captured during JSONL parsing and persisted on the
     # day_stats so the auth-mode detection is per-session, not per-process.
@@ -311,6 +322,7 @@ def _build_daily_usage_metadata(day_stats: dict[str, Any], ratio: float) -> dict
             cache_write_tokens=cache_write,
         ),
         cost_estimated=cost,
+        cost_no_cache_estimated=cost_no_cache,
         cost_quality="factual" if has_native_tokens else "unknown",
         active_time_quality="defensible",
         cost_basis="native_message_usage",
@@ -336,6 +348,13 @@ def parse_session_file(path: Path) -> dict[str, Any]:
     first_ts: str | None = None
     last_ts: str | None = None
     session_id = path.stem  # le nom du fichier fait office d'ID
+    # Sous-agents : journaux sous <project>/subagents/**/*.jsonl. Chaque ligne
+    # porte agentId + isSidechain=true + sessionId (session parente). On capture
+    # ca une fois pour taguer l'"agentic work unit" (session Claude Code vs
+    # sous-agent) — cf project-activity-tracking-ship-sight1000x memory.
+    agent_id: str | None = None
+    parent_session_id: str | None = None
+    is_subagent = False
 
     total_tok_in = 0
     total_tok_out = 0
@@ -376,6 +395,7 @@ def parse_session_file(path: Path) -> dict[str, Any]:
         "web_fetch_requests": 0,       # server_tool_use.web_fetch_requests
         "service_tier": None,          # standard | priority | batch (impacte le prix)
         "cost": 0.0,
+        "cost_no_cache": 0.0,          # meme tokens, sans remise de cache (borne haute)
         "user_msg_counts": {"typed": 0, "approval": 0, "tool_result": 0, "system": 0, "paste": 0},
         "assistant_turns": 0,
         "first_ts": None,
@@ -415,6 +435,17 @@ def parse_session_file(path: Path) -> dict[str, Any]:
                 # CWD est dans les metas au debut du fichier
                 if not cwd:
                     cwd = record.get("cwd") or record.get("workingDirectory")
+
+                if agent_id is None:
+                    aid = record.get("agentId")
+                    if isinstance(aid, str) and aid.strip():
+                        agent_id = aid.strip()
+                if parent_session_id is None:
+                    sid = record.get("sessionId")
+                    if isinstance(sid, str) and sid.strip():
+                        parent_session_id = sid.strip()
+                if not is_subagent and record.get("isSidechain") is True:
+                    is_subagent = True
 
                 rec_type = record.get("type")
 
@@ -484,6 +515,9 @@ def parse_session_file(path: Path) -> dict[str, Any]:
                     total_tok_in += tin + cache_read + cache_create
                     total_tok_out += tout
                     cost_here = _estimate_cost(model, tin, tout, cache_read, cache_create)
+                    cost_here_no_cache = _estimate_cost(
+                        model, tin, tout, cache_read, cache_create, cache_discount=False
+                    )
                     total_cost += cost_here
                     d["tokens_input_uncached"] += tin
                     d["tokens_input"] += tin + cache_read + cache_create
@@ -498,6 +532,7 @@ def parse_session_file(path: Path) -> dict[str, Any]:
                     if tier and not d["service_tier"]:
                         d["service_tier"] = tier
                     d["cost"] += cost_here
+                    d["cost_no_cache"] += cost_here_no_cache
                     d["assistant_turns"] += 1
                     if ts:
                         d["assistant_timestamps"].append(ts)
@@ -547,6 +582,14 @@ def parse_session_file(path: Path) -> dict[str, Any]:
     except OSError:
         pass
 
+    if is_subagent:
+        # path.stem alone collides across sub-agents: nested workflow
+        # journals all share the generic stem "journal"
+        # (subagents/workflows/<wf-id>/journal.jsonl). agentId is unique per
+        # sub-agent and present on nearly every record; fall back to a path
+        # hash on the rare file where it's missing.
+        session_id = agent_id or ("subagent-" + hashlib.sha256(str(path).encode()).hexdigest()[:24])
+
     active_sec = _estimate_duration_sec(user_events)
     # Cap anti-aberration : sessions > 12h sont suspectes (laissees ouvertes)
     was_capped = active_sec > MAX_ACTIVE_SEC_PER_SESSION
@@ -579,14 +622,28 @@ def parse_session_file(path: Path) -> dict[str, Any]:
         "user_msg_counts": user_msg_counts,
         "was_capped": was_capped,
         "daily": dict(daily),  # split par jour calendaire
+        "is_subagent": is_subagent,
+        "agent_id": agent_id,
+        "parent_session_id": parent_session_id,
     }
 
 
 def iter_session_files(projects_dir: Path = CLAUDE_CODE_DIR) -> Iterator[Path]:
-    """Yield tous les fichiers JSONL sous ~/.claude/projects/."""
+    """Yield tous les fichiers JSONL sous ~/.claude/projects/.
+
+    Couvre 2 formes : les sessions top-level (``<slug>/<session>.jsonl``) et
+    les journaux de sous-agents, qui vivent un niveau plus bas — sous la
+    session qui les a lances : ``<slug>/<session-uuid>/subagents/**/*.jsonl``
+    (y compris les workflows imbriques comme
+    ``subagents/workflows/<id>/journal.jsonl``). Sans le second glob, ~86%
+    des fichiers JSONL reels (mesure 2026-07-01, 992/1157) — donc la
+    quasi-totalite du travail des sous-agents — n'etaient jamais lus,
+    sous-estimant fortement tokens/cout par projet.
+    """
     if not projects_dir.exists():
         return
     yield from projects_dir.glob("*/*.jsonl")
+    yield from projects_dir.glob("*/*/subagents/**/*.jsonl")
 
 
 def collect(storage, classifier, privacy_config: dict[str, Any]) -> dict[str, int]:
@@ -602,11 +659,19 @@ def collect(storage, classifier, privacy_config: dict[str, Any]) -> dict[str, in
     """
     from ship1000x.core.privacy import sanitize_event
 
-    stats = {"files_seen": 0, "sessions_ingested": 0, "events_ingested": 0, "skipped": 0}
+    stats = {
+        "files_seen": 0,
+        "sessions_ingested": 0,
+        "events_ingested": 0,
+        "skipped": 0,
+        "subagent_files_seen": 0,
+    }
     exclude_paths = privacy_config.get("exclude_paths", []) or []
 
     for jsonl_path in iter_session_files():
         stats["files_seen"] += 1
+        if "subagents" in jsonl_path.parts:
+            stats["subagent_files_seen"] += 1
         # Stable ingestion key. Usually under ~/.claude, so we key on the
         # home-relative path; but a session file can legitimately live outside
         # HOME (external volume, symlink, custom CLAUDE_CONFIG_DIR) — there
@@ -624,6 +689,13 @@ def collect(storage, classifier, privacy_config: dict[str, Any]) -> dict[str, in
             continue
 
         parsed = parse_session_file(jsonl_path)
+
+        # Empty/unparseable file (e.g. a sub-agent journal with zero
+        # timestamped records) — nothing to store, `sessions.started_at`
+        # is NOT NULL.
+        if not parsed.get("started_at"):
+            stats["skipped"] += 1
+            continue
 
         # Check exclusion
         cwd = parsed.get("cwd") or ""
@@ -732,6 +804,16 @@ def collect(storage, classifier, privacy_config: dict[str, Any]) -> dict[str, in
                             else None
                         ),
                         "session_id": parsed["session_id"],
+                        # Unite "agentic work unit" (cf memory
+                        # project-activity-tracking-ship-sight1000x) : distingue
+                        # une session Claude Code humaine d'un journal de
+                        # sous-agent (Task tool). `agent_id`/`parent_session_id`
+                        # restent None pour les sessions top-level.
+                        "agentic_unit": {
+                            "kind": "claude_subagent" if parsed.get("is_subagent") else "claude_session",
+                            "agent_id": parsed.get("agent_id"),
+                            "parent_session_id": parsed.get("parent_session_id"),
+                        },
                         "split_ratio": round(ratio, 3),
                         "primary_project": project_id,
                         # V4 : timeline markers pour vue debug / cap configurable

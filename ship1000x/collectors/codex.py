@@ -308,6 +308,16 @@ def parse_session_file(path: Path) -> dict[str, Any]:
         cached_input_tokens=cached_input,
         reasoning_output_tokens=reasoning_output,
     )
+    # Meme volume de tokens, sans la remise de cache OpenAI — borne haute
+    # utilisee pour chiffrer l'economie reelle du cache (cf core.usage).
+    cost_estimated_no_cache = estimate_openai_cost(
+        model=model,
+        tokens_input=tokens_in,
+        tokens_output=tokens_out,
+        cached_input_tokens=cached_input,
+        reasoning_output_tokens=reasoning_output,
+        cache_discount=False,
+    )
     # event_timeline V4 : [[epoch_sec, type_code], ...] trie. Permet au calcul
     # unifie cross-sources (core.unified_metrics) de fusionner les events
     # humains Codex avec ceux de Claude Code/openclaw. Sans ca, Codex compte
@@ -337,6 +347,7 @@ def parse_session_file(path: Path) -> dict[str, Any]:
             reasoning_tokens=reasoning_output,
         ),
         cost_estimated=cost_estimated,
+        cost_no_cache_estimated=cost_estimated_no_cache,
         cost_quality="factual" if (tokens_in or tokens_out) else "unknown",
         token_source="codex_total_token_usage",
         auth_mode=auth_mode,
@@ -444,6 +455,12 @@ def collect(storage, classifier, privacy_config: dict[str, Any]) -> dict[str, in
             # project attribution (which stays in project_conf above).
             "confidence_flag": confidence_flag_from_usage(parsed.get("usage")),
             "raw_meta": json.dumps({
+                # Stem du fichier rollout — cle de correlation avec
+                # `~/.codex/state_5.sqlite` (table threads.rollout_path).
+                # Sans ca, codex_sqlite.py ne peut pas retrouver quel thread
+                # correspond a cet event pour tagger l'agentic_unit (role
+                # root/subagent) ou reclassifier via git_origin_url.
+                "session_id": parsed["session_id"],
                 "user_msg_counts": parsed["user_msg_counts"],
                 "tool_calls": parsed["tool_call_count"],
                 # V7 : breakdown par nom de fonction-outil (categorique).

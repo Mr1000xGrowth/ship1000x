@@ -153,10 +153,43 @@ def _fetch_session_intervals_for_day(
         params.append(machine_id)
     with storage.conn() as conn:
         rows = conn.execute(
-            f"SELECT source, started_at, duration_sec FROM events WHERE {where}",
+            f"SELECT id, source, started_at, duration_sec, raw_meta FROM events WHERE {where}",
             params,
         ).fetchall()
     return [dict(r) for r in rows]
+
+
+CANONICAL_AGENTIC_UNIT_KINDS = frozenset({
+    "claude_session",
+    "claude_subagent",
+    "codex_thread",
+    "codex_subagent",
+})
+
+LEGACY_CANONICAL_AGENT_SOURCES = frozenset({
+    "claude_code",
+    "codex",
+})
+
+
+def _is_canonical_agent_work_interval(row: dict) -> bool:
+    """True for intervals that represent real agent work, not mirror telemetry.
+
+    `codex_macapp`, `codex_desktop`, provider usage exports, and desktop
+    metadata are valuable for presence, cost, and audit context, but they are
+    not additional work units when the canonical Codex/Claude session logs are
+    present. Legacy DBs created before `agentic_unit` existed still count
+    `claude_code` and `codex` as canonical.
+    """
+    try:
+        meta = json.loads(row.get("raw_meta") or "{}")
+    except (TypeError, json.JSONDecodeError):
+        meta = {}
+    unit = meta.get("agentic_unit") if isinstance(meta, dict) else None
+    kind = unit.get("kind") if isinstance(unit, dict) else None
+    if kind in CANONICAL_AGENTIC_UNIT_KINDS:
+        return True
+    return row.get("source") in LEGACY_CANONICAL_AGENT_SOURCES
 
 
 def merge_human_events_cross_sources(
@@ -248,6 +281,7 @@ def compute_unified_metrics(
     # des ecarts laisse tomber. Cf. docstring du module.
     session_rows = _fetch_session_intervals_for_day(storage, day, machine_id=machine_id)
     clamped_intervals: list[tuple[float, float]] = []
+    canonical_agent_intervals: list[tuple[float, float]] = []
     sources_with_interval: set[str] = set()
     for r in session_rows:
         start = _parse_iso_to_epoch(r["started_at"])
@@ -258,6 +292,8 @@ def compute_unified_metrics(
         hi = min(start + float(dur), day_end)
         if hi > lo:
             clamped_intervals.append((lo, hi))
+            if _is_canonical_agent_work_interval(r):
+                canonical_agent_intervals.append((lo, hi))
             sources_with_interval.add(r["source"])
     union_active = union_duration_sec(clamped_intervals)
 
@@ -301,9 +337,17 @@ def compute_unified_metrics(
     # micro-pauses humain non detectees (best effort, documente comme tel).
     agent_estimated = max(0, wall_clock - active_p95)
 
-    # Temps agents ADDITIF : somme des durees de session bornees au jour, SANS
-    # dedup cross-sources. Quand l'humain pilote N sessions en parallele, leurs
-    # durees s'additionnent -> peut depasser 24h (debit cumule, credible).
+    # Temps agents ADDITIF : somme des durees des unites agentiques canoniques
+    # bornees au jour, SANS dedup entre vraies unites paralleles. Quand
+    # l'humain pilote N sessions/sous-agents en parallele, leurs durees
+    # s'additionnent -> peut depasser 24h (debit cumule, credible).
+    #
+    # Important : on ne somme pas les sources miroir (`codex_macapp`,
+    # `codex_desktop`, exports provider, desktop metadata) quand les journaux
+    # canoniques Claude/Codex existent deja. Ces sources restent utiles pour
+    # presence humaine, audit et couts, mais elles ne creent pas du travail
+    # agent supplementaire. Pour les bases legacy qui n'ont pas encore
+    # `agentic_unit`, `claude_code` et `codex` restent des sources canoniques.
     # A l'inverse de active_sec_unified (presence humaine dedupliquee, <= 24h).
     # Le ratio additive / unified = facteur d'orchestration.
     #
@@ -313,7 +357,8 @@ def compute_unified_metrics(
     # certaines sessions n'ont pas de duree mesuree donnent un cumule < presence
     # (artefact de mesure : la methode des ecarts ponte des prompts que la somme
     # des durees de session ne capte pas). Garantit cumule >= presence partout.
-    agent_additive = max(int(sum(hi - lo for lo, hi in clamped_intervals)), active_p95)
+    additive_intervals = canonical_agent_intervals or clamped_intervals
+    agent_additive = max(int(sum(hi - lo for lo, hi in additive_intervals)), active_p95)
 
     return {
         "date": day,

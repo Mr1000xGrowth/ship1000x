@@ -33,6 +33,12 @@ ALLOWED_META_KEYS = {
     # Identifiants opaques (pas de contenu)
     "session_id", "session_uuid", "process_uuid", "workspace_id",
     "task_id", "pid", "commit_hash", "primary_project",
+    # Unite "agentic work unit" cross-source (Codex thread/sous-agent, Claude
+    # Code session/sous-agent Task). `kind` est un enum categoriel ; agent_id/
+    # parent_session_id/thread_id/parent_thread_id sont des identifiants
+    # opaques (UUID), jamais du contenu ni un path.
+    "agentic_unit", "kind", "agent_id", "parent_session_id",
+    "thread_id", "parent_thread_id", "role",
     # Claude Desktop session sidecar identifiers and metadata fields.
     # All categorical / numeric / GitHub-public values; no raw content.
     "cli_session_id", "title", "title_source", "permission_mode",

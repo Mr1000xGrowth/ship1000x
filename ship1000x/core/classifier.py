@@ -51,6 +51,28 @@ class ProjectRule:
 # Utilise lru_cache pour eviter de re-executer `git config` 1000x pour
 # le meme path dans la meme ingestion.
 
+# Certains clients (Codex.app, Codex CLI/Desktop lance depuis la racine du
+# workspace) logguent un cwd = racine generique du multi-repo plutot que le
+# vrai sous-dossier projet. Si cette racine est ELLE-MEME un repo git (cas
+# frequent : un repo "memoire" a la racine du workspace), l'etape 5 (auto
+# .git/ parent + remote) resout tout le monde vers ce repo generique avec une
+# confiance elevee (0.85) — ecrasant le vrai signal. Meme classe de bug que
+# `codex_macapp._is_workspace_root_placeholder` (fixe 2026-07 sur ce
+# collector precis) ; ici centralise dans le classifieur pour couvrir TOUS
+# les collecteurs (codex CLI/state_5.sqlite reproduit le meme symptome).
+_WORKSPACE_ROOT_PLACEHOLDERS = frozenset({
+    str(Path.home() / "Developer").rstrip("/"),
+    "~/Developer",
+})
+
+
+def _is_workspace_root_placeholder(path: str | None) -> bool:
+    """Vrai si `path` n'est que la racine generique du workspace (aucun
+    sous-dossier de projet) — signal quasi inutile pour la classification."""
+    if not path:
+        return False
+    return path.rstrip("/") in _WORKSPACE_ROOT_PLACEHOLDERS
+
 
 def _normalize_git_remote(url: str) -> str:
     """Normalise une remote URL git en identifiant canonique.
@@ -505,9 +527,29 @@ class Classifier:
 
         # 5. AUTO : resolveur generique base sur git (marche sans yaml).
         # On essaie cwd en priorite, puis le 1er path touche (plus fiable
-        # que paths_distribution car un seul hit de .git/ suffit).
-        for candidate in [cwd] + list(paths or []):
-            if not candidate:
+        # que paths_distribution car un seul hit de .git/ suffit). On
+        # ignore la racine generique du workspace (cf
+        # _is_workspace_root_placeholder) : elle n'apporte aucune info de
+        # projet et ecraserait le vrai signal avec une confiance elevee.
+        #
+        # Dedup + plafond a 20 candidats : sans cwd (skippe ci-dessus), on
+        # retombe sur `paths` qui peut contenir des centaines/milliers
+        # d'entrees (regex best-effort sur des commandes shell longues,
+        # cf `_extract_tool_paths_codex`). Un seul hit de .git/ suffit — pas
+        # besoin d'examiner toute la liste, et `p.exists()` peut bloquer
+        # longtemps sur un volume reseau/externe demonte (ex. montage
+        # `/Volumes/...` absent) si on lui laisse des milliers de candidats.
+        seen: set[str] = set()
+        candidates: list[str] = []
+        for c in [cwd] + list(paths or []):
+            if not c or c in seen:
+                continue
+            seen.add(c)
+            candidates.append(c)
+            if len(candidates) >= 20:
+                break
+        for candidate in candidates:
+            if not candidate or _is_workspace_root_placeholder(candidate):
                 continue
             uid, _, auto_conf = resolve_repo_uid(candidate)
             if uid:

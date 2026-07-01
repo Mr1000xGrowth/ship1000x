@@ -195,6 +195,52 @@ class TestComputeUnifiedMetricsIntegration(unittest.TestCase):
         self.assertEqual(result["sample_size"], 2)
         self.assertEqual(result["active_sec_strict"], 60)
 
+    def test_agent_additive_uses_canonical_units_not_mirror_sources(self):
+        """Agent cumulative sums real units, not Codex desktop/mac mirrors."""
+        import json
+
+        with self.storage.conn() as c:
+            rows = [
+                (
+                    "codex-thread",
+                    "codex",
+                    3600,
+                    {"agentic_unit": {"kind": "codex_thread", "id": "thread-1"}},
+                ),
+                (
+                    "codex-mirror",
+                    "codex_macapp",
+                    1800,
+                    {"mirror_of": "thread-1"},
+                ),
+                (
+                    "claude-subagent",
+                    "claude_code",
+                    600,
+                    {"agentic_unit": {"kind": "claude_subagent", "id": "sub-1"}},
+                ),
+            ]
+            for event_id, source, duration, raw_meta in rows:
+                c.execute(
+                    """INSERT INTO events
+                       (id, source, event_type, started_at, duration_sec, raw_meta, machine_id)
+                       VALUES (?, ?, 'session', ?, ?, ?, ?)""",
+                    (
+                        event_id,
+                        source,
+                        "2024-05-13T10:00:00+00:00",
+                        duration,
+                        json.dumps(raw_meta),
+                        "test-machine",
+                    ),
+                )
+
+        result = compute_unified_metrics(self.storage, "2024-05-13", machine_id="test-machine")
+
+        self.assertEqual(result["sources_count"], 3)
+        self.assertEqual(result["active_sec_unified"], 3600)
+        self.assertEqual(result["agent_sec_additive"], 4200)
+
     def test_unified_alias_matches_p95(self):
         """active_sec_unified = active_sec_p95 (alias canonique V1)."""
         self._insert_event("e1", "claude_code", "2024-05-13T00:00:00Z",
