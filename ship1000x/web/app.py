@@ -297,6 +297,44 @@ def create_app(db_path: Path, config_dir: Path) -> Flask:
         except Exception:
             return None
 
+    def _window_unified_points(days: int, user_email: str | None) -> list[dict]:
+        """Recompute one daily human timeline across all machine aliases.
+
+        `daily_unified` is stored per `(date, machine_id)` for auditability.
+        The overview answers a different question: "how much real human time
+        did this person spend?" Summing raw machine rows overcounts when the
+        same Mac appears under aliases (`Mac-Studio.local`, `mac-studio.home`,
+        old UUID hostnames). Recomputing from raw events with `machine_id=None`
+        merges all sources into one cross-machine timeline for the displayed
+        window, without mutating the stored rollups.
+        """
+        from ship1000x.core.unified_metrics import compute_unified_metrics
+
+        with storage.conn() as conn:
+            rows = conn.execute(
+                """
+                SELECT DISTINCT date(started_at) AS day
+                FROM events
+                WHERE source != 'git'
+                  AND started_at IS NOT NULL
+                  AND date(started_at) >= date('now', ? || ' days')
+                ORDER BY day
+                """,
+                (f"-{days}",),
+            ).fetchall()
+
+        points: list[dict] = []
+        for r in rows:
+            day = r["day"]
+            if not day:
+                continue
+            metrics = compute_unified_metrics(
+                storage, day, user_email=user_email, machine_id=None,
+            )
+            if metrics is not None:
+                points.append(metrics)
+        return points
+
     # ─── Pages ─────────────────────────────────────────────────────────
 
     @app.route("/")
@@ -321,14 +359,9 @@ def create_app(db_path: Path, config_dir: Path) -> Flask:
     def api_highlights():
         days = int(request.args.get("days", 30))
         user_email = _get_user_email()
+        unified_points = _window_unified_points(days, user_email)
 
         with storage.conn() as conn:
-            unif = conn.execute(
-                "SELECT SUM(active_sec_unified) AS u, SUM(wall_clock_sec) AS w, "
-                "SUM(agent_sec_additive) AS aa, AVG(threshold_used_sec) AS thr "
-                "FROM daily_unified WHERE date >= date('now', ? || ' days')",
-                (f"-{days}",),
-            ).fetchone()
             lines_real = conn.execute(
                 "SELECT SUM(CAST(COALESCE(json_extract(raw_meta, '$.lines_real_added'), 0) AS INTEGER)) AS l "
                 "FROM events WHERE source = 'git' AND date(started_at) >= date('now', ? || ' days')",
@@ -342,11 +375,6 @@ def create_app(db_path: Path, config_dir: Path) -> Flask:
             sources_count = conn.execute(
                 "SELECT COUNT(DISTINCT source) AS n FROM events "
                 "WHERE date(started_at) >= date('now', ? || ' days')",
-                (f"-{days}",),
-            ).fetchone()["n"] or 0
-            active_days = conn.execute(
-                "SELECT COUNT(*) AS n FROM daily_unified "
-                "WHERE date >= date('now', ? || ' days') AND active_sec_unified > 0",
                 (f"-{days}",),
             ).fetchone()["n"] or 0
             cost_truth = _compute_cost_truth(conn, days)
@@ -366,10 +394,26 @@ def create_app(db_path: Path, config_dir: Path) -> Flask:
                 "web_search_requests", "web_fetch_requests",
             )}
 
-        active_h = (unif["u"] or 0) / 3600
-        wall_h = (unif["w"] or 0) / 3600
-        agent_additive_h = (unif["aa"] or 0) / 3600
-        threshold_min = (unif["thr"] or 0) / 60
+        active_sec = sum(int(p.get("active_sec_unified") or 0) for p in unified_points)
+        wall_sec = sum(int(p.get("wall_clock_sec") or 0) for p in unified_points)
+        agent_additive_sec = sum(
+            int(p.get("agent_sec_additive") or 0) for p in unified_points
+        )
+        threshold_values = [
+            int(p.get("threshold_used_sec") or 0)
+            for p in unified_points
+            if int(p.get("threshold_used_sec") or 0) > 0
+        ]
+        active_days = sum(
+            1 for p in unified_points if int(p.get("active_sec_unified") or 0) > 0
+        )
+
+        active_h = active_sec / 3600
+        wall_h = wall_sec / 3600
+        agent_additive_h = agent_additive_sec / 3600
+        threshold_min = (
+            sum(threshold_values) / len(threshold_values) / 60 if threshold_values else 0
+        )
         # Levier unique = heures de travail cumulees (sessions //, humain + agents)
         # par heure de presence humaine reelle dedupliquee. > 1 = pilotage en
         # parallele. Base sur le temps reellement engage (pas le temps "app
@@ -416,29 +460,32 @@ def create_app(db_path: Path, config_dir: Path) -> Flask:
             "sources_count": sources_count,
             "active_days": active_days,
             "threshold_min": round(threshold_min, 1),
+            "time_aggregation": {
+                "mode": "cross_machine_recomputed",
+                "basis": "raw_events",
+                "agent_work_basis": "canonical_agentic_units_with_legacy_fallback",
+                "note": (
+                    "Overview recomputes one daily timeline across all machine aliases "
+                    "to avoid overcounting the same person under multiple machine_id values. "
+                    "Agent cumulative time sums canonical Claude/Codex work units and "
+                    "does not add mirror telemetry such as codex_macapp/codex_desktop "
+                    "when canonical session logs are present."
+                ),
+            },
         })
 
     @app.route("/api/trend")
     def api_trend():
         days = int(request.args.get("days", 30))
-        with storage.conn() as conn:
-            rows = conn.execute(
-                """SELECT date,
-                          active_sec_unified AS active_sec,
-                          agent_sec_additive,
-                          wall_clock_sec
-                   FROM daily_unified
-                   WHERE date >= date('now', ? || ' days')
-                   ORDER BY date""",
-                (f"-{days}",),
-            ).fetchall()
+        rows = _window_unified_points(days, _get_user_email())
         return jsonify([
             {
                 "schema_version": "ship1000x.dashboard.trend_point.v1",
                 "date": r["date"],
-                "active_hours": round((r["active_sec"] or 0) / 3600, 2),
+                "active_hours": round((r["active_sec_unified"] or 0) / 3600, 2),
                 "agent_hours_additive": round((r["agent_sec_additive"] or 0) / 3600, 2),
                 "wall_hours": round((r["wall_clock_sec"] or 0) / 3600, 2),
+                "time_aggregation": "cross_machine_recomputed",
             }
             for r in rows
         ])

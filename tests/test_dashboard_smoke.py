@@ -255,6 +255,59 @@ class TestDashboardSmoke(unittest.TestCase):
         )
         self.assertIn("not invoice truth", data["cost_truth"]["presentation_label"])
 
+    def test_api_highlights_recomputes_cross_machine_time_without_summing_aliases(self):
+        """Overview must show one human timeline, not raw machine_id sums.
+
+        Two machine aliases can represent the same human/Mac. If their activity
+        overlaps perfectly, human active time is 1h, not 2h. Additive agent work
+        remains 2h because two sessions really ran in parallel.
+        """
+        s = Storage(self.db_path)
+        ts = datetime.now(timezone.utc).replace(
+            hour=10, minute=0, second=0, microsecond=0
+        ).isoformat()
+        with s.conn() as c:
+            c.execute("DELETE FROM events")
+            c.execute("DELETE FROM daily_unified")
+            for idx, machine in enumerate(("Mac-Studio.local", "mac-studio.home")):
+                c.execute(
+                    """INSERT INTO events
+                       (id, source, event_type, started_at, duration_sec,
+                        cost_estimated, confidence_flag, raw_meta, machine_id)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        f"alias-{idx}",
+                        "codex",
+                        "session",
+                        ts,
+                        3600,
+                        0.0,
+                        "high",
+                        "{}",
+                        machine,
+                    ),
+                )
+                # Deliberately seed the old overcounting shape too: the API
+                # should recompute from events and ignore this raw row sum.
+                c.execute(
+                    """INSERT INTO daily_unified
+                       (date, machine_id, active_sec_unified, agent_sec_additive,
+                        wall_clock_sec, threshold_used_sec, computed_at)
+                       VALUES (date(?), ?, ?, ?, ?, ?, ?)""",
+                    (ts, machine, 3600, 3600, 3600, 300, ts),
+                )
+
+        client = self._make_client()
+        data = client.get("/api/highlights?days=30").get_json()
+        self.assertEqual(data["active_hours"], 1.0)
+        self.assertEqual(data["agent_hours_additive"], 2.0)
+        self.assertEqual(data["time_aggregation"]["mode"], "cross_machine_recomputed")
+
+        trend = client.get("/api/trend?days=30").get_json()
+        self.assertEqual(len(trend), 1)
+        self.assertEqual(trend[0]["active_hours"], 1.0)
+        self.assertEqual(trend[0]["agent_hours_additive"], 2.0)
+
     def test_api_cost_models_returns_valid_json(self):
         client = self._make_client()
         r = client.get("/api/cost-models?days=30")

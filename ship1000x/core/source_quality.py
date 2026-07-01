@@ -67,7 +67,19 @@ SOURCE_QUALITY_PROFILES: dict[str, SourceQualityProfile] = {
         cost_quality="factual",
         active_time_quality="defensible",
         usage_metadata_expected=True,
-        caveats=("Tokens are native when history JSONL exposes them.",),
+        caveats=(
+            "Tokens are native when history JSONL exposes them.",
+            # Sub-agent journals (Task tool spawns) live under
+            # <project>/subagents/**/*.jsonl and are ingested with the same
+            # native-usage quality as top-level sessions (agentId is a
+            # strict/reliable identifier — high confidence). Broad-keyword
+            # project matching (title/content search across all projects,
+            # not just tool-touched paths) is a separate, noisier scope not
+            # implemented here — treat any such cross-project estimate as
+            # medium confidence, not factual.
+            "Sub-agent journals (agentId/isSidechain) are included since 2026-07; "
+            "attribution is strict-cwd (high), not broad-keyword (medium).",
+        ),
         next_action="Keep Claude usage fixtures aligned with message usage, cache, and model changes.",
     ),
     "codex": SourceQualityProfile(
@@ -80,6 +92,23 @@ SOURCE_QUALITY_PROFILES: dict[str, SourceQualityProfile] = {
         usage_metadata_expected=True,
         caveats=("Token quality falls back to unknown when total_token_usage is absent.",),
         next_action="Keep synthetic rollout fixtures current for cache and reasoning tokens.",
+    ),
+    "codex_sqlite": SourceQualityProfile(
+        source="codex_sqlite",
+        label="Codex state_5.sqlite (thread structure)",
+        collector_stage="metadata_enrichment",
+        token_quality="n/a",
+        cost_quality="n/a",
+        active_time_quality="n/a",
+        usage_metadata_expected=False,
+        caveats=(
+            "Very high confidence: `threads` + `thread_spawn_edges` are a "
+            "deterministic local DB read, not a heuristic. Used only to tag "
+            "each codex event's agentic_unit (root thread vs sub-agent) and "
+            "to reclassify low-confidence project attribution via "
+            "git_origin_url — it never creates events or tokens/cost.",
+        ),
+        next_action="Cross-check root+subagent thread counts against the JSONL session count per project.",
     ),
     "codex_macapp": SourceQualityProfile(
         source="codex_macapp",

@@ -128,28 +128,30 @@ def test_audit_source_recomputes_stored_cost_within_floating_point_error():
     schema mismatch, or a collector bug."""
     storage = InMemoryStorage()
     # Real-shape Claude Code event from the user's store: a typical
-    # heavy-cache Opus day. cost is what the collector computed and
-    # what audit will recompute from the same tokens.
+    # heavy-cache Opus day. cost is what the collector computes with
+    # the current pricing snapshot and what audit recomputes from the
+    # same tokens.
+    expected_cost = 375.22985275
     storage.insert(
         id="e1",
         source="claude_code",
         started_at=_today_iso(1),
-        cost_estimated=1125.69,
+        cost_estimated=expected_cost,
         raw_meta=_claude_meta(
             "claude-opus-4-7",
             uncached=18_014,
             cache_read=497_748_503,
             cache_write=16_196_709,
             output=1_001_444,
-            cost=1125.69,
+            cost=expected_cost,
         ),
     )
     report = audit_source(storage, "claude_code", window_days=7, top=10)
 
     assert report.summary.total_events == 1
-    assert report.summary.total_cost_stored == pytest.approx(1125.69)
+    assert report.summary.total_cost_stored == pytest.approx(expected_cost)
     # Recomputed must match the stored cost to within rounding noise.
-    assert report.summary.total_cost_recomputed == pytest.approx(1125.69, abs=0.01)
+    assert report.summary.total_cost_recomputed == pytest.approx(expected_cost, abs=0.01)
     assert abs(report.summary.max_abs_delta) < 0.01
     assert report.summary.auth_mode_counts.get("oauth") == 1
 

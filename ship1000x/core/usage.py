@@ -250,6 +250,7 @@ def build_usage_metadata(
     token_source: str = "native",
     auth_mode: str | None = None,
     provider_policy_snapshot: dict | None = None,
+    cost_no_cache_estimated: float | None = None,
 ) -> dict:
     """Build safe raw_meta usage metadata with explicit measurement quality.
 
@@ -259,6 +260,14 @@ def build_usage_metadata(
     pay-per-token estimate into the **API-equivalent** cost (always) and
     the **billed-estimated** cost (zero under OAuth subscriptions, full
     estimate under API keys). See ``ship1000x.core.auth_mode``.
+
+    ``cost_no_cache_estimated`` is the same token volume priced as if no
+    prompt-cache discount applied (collectors compute it by calling the
+    matching ``core.pricing`` estimator with ``cache_discount=False``). It
+    surfaces as ``cost.api_equivalent_no_cache_usd`` — a worst-case bound
+    used to show how much the cache is actually saving. ``None`` when the
+    collector does not track cache tokens (falls back to the with-cache
+    value so the field is always present and never understates cost).
     """
     model_canonical = canonicalize_model(model_raw)
     pricing = resolve_model_pricing(provider, model_raw)
@@ -279,6 +288,10 @@ def build_usage_metadata(
         # the dollar figure instead of leaving it in a sidecar command.
         normalized_cost_quality = "defensible"
     cost_value = round(float(cost_estimated or 0.0), 8)
+    cost_no_cache_value = round(
+        float(cost_no_cache_estimated if cost_no_cache_estimated is not None else cost_value),
+        8,
+    )
     normalized_auth_mode = (auth_mode or "unknown").strip().lower()
     if normalized_auth_mode not in {"oauth", "api_key", "unknown"}:
         normalized_auth_mode = "unknown"
@@ -298,6 +311,7 @@ def build_usage_metadata(
         "cost": {
             "estimated_usd": cost_value,
             "api_equivalent_usd": cost_value,
+            "api_equivalent_no_cache_usd": cost_no_cache_value,
             "billed_estimated_usd": round(billed_estimated, 8),
             "pricing_source": pricing_source,
             "pricing_version": pricing_version,

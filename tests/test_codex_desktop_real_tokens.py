@@ -222,9 +222,9 @@ def test_extract_usage_parses_real_shape_observed_in_logs_2_sqlite():
         tokens_output=out["output_tokens"],
         cached_input_tokens=out["cached_tokens"],
     )
-    # gpt-5.5: input=$1.25/M, cached_input=$0.125/M, output=$10/M
-    # uncached_input = 4096-3200=896 tokens × $1.25/M = $0.00112
-    # cached       = 3200 × $0.125/M = $0.00040
-    # output       = 128  × $10.0/M  = $0.00128
-    # ≈ $0.00280
-    assert cost == pytest.approx(0.00280, abs=1e-4)
+    # gpt-5.5: input=$5/M, cached_input=$0.50/M, output=$30/M
+    # uncached_input = 4096-3200=896 tokens × $5/M = $0.00448
+    # cached       = 3200 × $0.50/M = $0.00160
+    # output       = 128  × $30.0/M = $0.00384
+    # ≈ $0.00992
+    assert cost == pytest.approx(0.00992, abs=1e-4)

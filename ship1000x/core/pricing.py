@@ -10,7 +10,7 @@ Sources :
   - Anthropic : https://www.anthropic.com/pricing
   - OpenAI : https://openai.com/api/pricing/
 
-Mise a jour 2026-04-21.
+Mise a jour 2026-07-01.
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ from datetime import date
 from typing import Literal
 
 PRICING_SOURCE = "ship1000x.core.pricing"
-PRICING_VERSION = "2026-04-21"
+PRICING_VERSION = "2026-07-01"
 # Au-dela de ce seuil, le snapshot tarifaire est considere perime (les tarifs
 # LLM bougent ; un coût API-equivalent base sur de vieux tarifs derive).
 PRICING_STALE_DAYS = 60
@@ -55,12 +55,13 @@ class PricingResolution:
 # Anthropic / Claude
 # Tarifs par million de tokens (USD)
 ANTHROPIC_PRICING = {
-    # Claude 4.7 family (janvier 2026)
-    "claude-opus-4-7": {"input": 15.0, "output": 75.0, "cache_read": 1.50, "cache_write": 18.75},
+    # Claude Opus 4.6+ family (2026): $5 input / $25 output, cache writes
+    # 1.25x input for 5m and cache reads 0.1x input.
+    "claude-opus-4-8": {"input": 5.0, "output": 25.0, "cache_read": 0.50, "cache_write": 6.25},
+    "claude-opus-4-7": {"input": 5.0, "output": 25.0, "cache_read": 0.50, "cache_write": 6.25},
+    "claude-opus-4-6": {"input": 5.0, "output": 25.0, "cache_read": 0.50, "cache_write": 6.25},
     "claude-sonnet-4-7": {"input": 3.0, "output": 15.0, "cache_read": 0.30, "cache_write": 3.75},
     # Claude 4.6 family (2025-2026)
-    "claude-opus-4-8": {"input": 15.0, "output": 75.0, "cache_read": 1.50, "cache_write": 18.75},
-    "claude-opus-4-6": {"input": 15.0, "output": 75.0, "cache_read": 1.50, "cache_write": 18.75},
     "claude-sonnet-4-6": {"input": 3.0, "output": 15.0, "cache_read": 0.30, "cache_write": 3.75},
     "claude-haiku-4-5": {"input": 0.80, "output": 4.0, "cache_read": 0.08, "cache_write": 1.0},
     # Legacy pre-2026
@@ -80,15 +81,11 @@ OPENAI_PRICING = {
     # GPT-5 family (2026, Codex inclus)
     # Source : https://openai.com/api/pricing/
     "gpt-5": {"input": 1.25, "output": 10.0, "cached_input": 0.125},
-    # gpt-5.5 is a mid-2026 refresh of gpt-5; pricing has not been observed to
-    # differ from gpt-5 at the time of writing. Listed explicitly so the
-    # pricing match quality stays "exact" instead of relying on the substring
-    # alias path (gpt-5 in gpt-5.5).
-    "gpt-5.5": {"input": 1.25, "output": 10.0, "cached_input": 0.125},
-    # Versions précises Codex 2026 (turn_context.model). Même famille tarifaire
-    # que gpt-5 ; listées explicitement pour un match "exact" plutôt qu'un
-    # alias substring vers gpt-5 (qui marquait la ligne en fallback).
-    "gpt-5.4": {"input": 1.25, "output": 10.0, "cached_input": 0.125},
+    # Versions précises Codex 2026 (turn_context.model). Elles ont leurs
+    # propres tarifs API publics ; on les liste explicitement pour éviter
+    # l'alias substring vers gpt-5, qui sous-estime fortement l'équivalent API.
+    "gpt-5.5": {"input": 5.0, "output": 30.0, "cached_input": 0.50},
+    "gpt-5.4": {"input": 2.50, "output": 15.0, "cached_input": 0.25},
     "gpt-5.3-codex": {"input": 1.25, "output": 10.0, "cached_input": 0.125},
     "gpt-5.3-codex-spark": {"input": 1.25, "output": 10.0, "cached_input": 0.125},
     "gpt-5-codex": {"input": 1.25, "output": 10.0, "cached_input": 0.125},
@@ -240,19 +237,29 @@ def estimate_anthropic_cost(
     tokens_output: int = 0,
     cache_read_tokens: int = 0,
     cache_write_tokens: int = 0,
+    cache_discount: bool = True,
 ) -> float:
     """Cout estime USD pour une session Anthropic (Claude Code).
 
     Les tokens `cache_read` sont factures a ~10% du tarif input chez Anthropic.
     Les tokens `cache_write` sont factures a ~125% du tarif input.
     Par defaut 0 si non fournis → compatible avec l'ancien appel tokens_in/tokens_out.
+
+    `cache_discount=False` calcule le cout "sans cache" (borne haute) :
+    `cache_read`/`cache_write` sont factures au tarif input plein, comme si
+    aucune remise de cache ne s'appliquait. Sert a chiffrer l'economie reelle
+    du cache (ecart entre avec-cache et sans-cache).
     """
     rates = _match_model(model, ANTHROPIC_PRICING)
     cost = 0.0
     cost += (tokens_input / 1_000_000) * rates.get("input", DEFAULT_PRICING["input"])
     cost += (tokens_output / 1_000_000) * rates.get("output", DEFAULT_PRICING["output"])
-    cost += (cache_read_tokens / 1_000_000) * rates.get("cache_read", 0.0)
-    cost += (cache_write_tokens / 1_000_000) * rates.get("cache_write", 0.0)
+    if cache_discount:
+        cost += (cache_read_tokens / 1_000_000) * rates.get("cache_read", 0.0)
+        cost += (cache_write_tokens / 1_000_000) * rates.get("cache_write", 0.0)
+    else:
+        full_input_rate = rates.get("input", DEFAULT_PRICING["input"])
+        cost += ((cache_read_tokens + cache_write_tokens) / 1_000_000) * full_input_rate
     return cost
 
 
@@ -262,6 +269,7 @@ def estimate_openai_cost(
     tokens_output: int = 0,
     cached_input_tokens: int = 0,
     reasoning_output_tokens: int = 0,
+    cache_discount: bool = True,
 ) -> float:
     """Cout estime USD pour une session OpenAI (Codex, GPT-5, etc.).
 
@@ -270,15 +278,23 @@ def estimate_openai_cost(
       le tarif reduit.
     `reasoning_output_tokens` : tokens de raisonnement GPT-5 / o-series. Factures
       comme output standard (inclus dans tokens_output cote JSONL Codex).
+
+    `cache_discount=False` calcule le cout "sans cache" (borne haute) :
+    `cached_input_tokens` est facture au tarif input plein au lieu du tarif
+    cache reduit.
     """
     rates = _match_model(model, OPENAI_PRICING)
     # Tokens input non-caches = total - caches
     non_cached_input = max(0, tokens_input - cached_input_tokens)
+    full_input_rate = rates.get("input", DEFAULT_PRICING["input"])
     cost = 0.0
-    cost += (non_cached_input / 1_000_000) * rates.get("input", DEFAULT_PRICING["input"])
-    cost += (cached_input_tokens / 1_000_000) * rates.get(
-        "cached_input", rates.get("input", DEFAULT_PRICING["input"]) * 0.1
-    )
+    cost += (non_cached_input / 1_000_000) * full_input_rate
+    if cache_discount:
+        cost += (cached_input_tokens / 1_000_000) * rates.get(
+            "cached_input", full_input_rate * 0.1
+        )
+    else:
+        cost += (cached_input_tokens / 1_000_000) * full_input_rate
     # reasoning_output deja inclus dans tokens_output cote Codex rollout : pas
     # besoin de l'ajouter separement. Parametre conserve pour traçabilite.
     cost += (tokens_output / 1_000_000) * rates.get("output", DEFAULT_PRICING["output"])

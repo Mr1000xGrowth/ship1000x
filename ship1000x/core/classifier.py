@@ -51,6 +51,28 @@ class ProjectRule:
 # Utilise lru_cache pour eviter de re-executer `git config` 1000x pour
 # le meme path dans la meme ingestion.
 
+# Certains clients (Codex.app, Codex CLI/Desktop lance depuis la racine du
+# workspace) logguent un cwd = racine generique du multi-repo plutot que le
+# vrai sous-dossier projet. Si cette racine est ELLE-MEME un repo git (cas
+# frequent : un repo "memoire" a la racine du workspace), l'etape 5 (auto
+# .git/ parent + remote) resout tout le monde vers ce repo generique avec une
+# confiance elevee (0.85) — ecrasant le vrai signal. Meme classe de bug que
+# `codex_macapp._is_workspace_root_placeholder` (fixe 2026-07 sur ce
+# collector precis) ; ici centralise dans le classifieur pour couvrir TOUS
+# les collecteurs (codex CLI/state_5.sqlite reproduit le meme symptome).
+_WORKSPACE_ROOT_PLACEHOLDERS = frozenset({
+    str(Path.home() / "Developer").rstrip("/"),
+    "~/Developer",
+})
+
+
+def _is_workspace_root_placeholder(path: str | None) -> bool:
+    """Vrai si `path` n'est que la racine generique du workspace (aucun
+    sous-dossier de projet) — signal quasi inutile pour la classification."""
+    if not path:
+        return False
+    return path.rstrip("/") in _WORKSPACE_ROOT_PLACEHOLDERS
+
 
 def _normalize_git_remote(url: str) -> str:
     """Normalise une remote URL git en identifiant canonique.
@@ -345,19 +367,7 @@ class Classifier:
              comme `/Users/<username>/Projects/my-app`)
         """
         counts: dict[str, int] = {}
-
-        # Precompute les markers par rule (id + segment distinctif des patterns)
-        markers_by_rule: dict[str, list[str]] = {}
-        for rule in self.rules:
-            markers: list[str] = [rule.id]
-            for pattern in rule.paths:
-                # Extrait le segment "nommant" le projet dans le glob
-                # ("*/my-project/*" -> "my-project")
-                for segment in pattern.split("/"):
-                    if segment and segment != "*" and "*" not in segment:
-                        if segment not in markers:
-                            markers.append(segment)
-            markers_by_rule[rule.id] = markers
+        markers_by_rule = self._markers_by_rule()
 
         for path in paths:
             matched = False
@@ -394,6 +404,64 @@ class Classifier:
         if total == 0:
             return {}
         return {pid: n / total for pid, n in counts.items()}
+
+    # Segments de chemin trop generiques pour servir de marker de substring
+    # fallback : ils apparaissent dans le chemin de N'IMPORTE QUEL projet
+    # sous le home directory (racine workspace, home dir lui-meme, dossiers
+    # systeme macOS courants). Sans cette liste noire, un pattern comme
+    # "~/Developer/vantacrew/vantacrew-console*" produit le marker "Developer"
+    # (segment non-wildcard du glob), qui matche alors TOUS les projets de
+    # Charles en pass 2 -- empechant pass 3 (auto-resolve git, qui aurait
+    # correctement classe vers le vrai projet) de jamais s'executer.
+    # Bug reel observe 2026-06-30/07-01 : Sabaca (842 commits git sur 2
+    # semaines) classait a 100% vers vantacrew-console a cause de ce marker.
+    _GENERIC_MARKER_BLOCKLIST = {
+        "~",
+        "developer",
+        "users",
+        "desktop",
+        "documents",
+        "downloads",
+        "library",
+        "projects",
+        "code",
+        "src",
+        "clients",
+        "repos",
+        "workspace",
+        "home",
+    }
+
+    def _markers_by_rule(self) -> dict[str, list[str]]:
+        """Precompute les markers par rule (id + segment distinctif des patterns).
+
+        Le marker est UNIQUEMENT le dernier segment non-wildcard de chaque
+        pattern (le nom du projet), jamais les segments parents generiques
+        (voir `_GENERIC_MARKER_BLOCKLIST`).
+        """
+        markers_by_rule: dict[str, list[str]] = {}
+        for rule in self.rules:
+            markers: list[str] = [rule.id]
+            for pattern in rule.paths:
+                # N'extrait QUE le DERNIER segment non-wildcard du glob comme
+                # marker ("~/Developer/vantacrew/vantacrew-console*" ->
+                # "vantacrew-console", pas "Developer" ni "vantacrew"). C'est
+                # le segment qui nomme reellement le projet ; les segments
+                # parents sont des dossiers d'organisation partages par
+                # d'autres projets et ne doivent jamais servir de marker.
+                segments = [
+                    s for s in pattern.split("/")
+                    if s and s != "*" and "*" not in s
+                ]
+                if segments:
+                    last = segments[-1]
+                    if (
+                        last not in markers
+                        and last.lower() not in self._GENERIC_MARKER_BLOCKLIST
+                    ):
+                        markers.append(last)
+            markers_by_rule[rule.id] = markers
+        return markers_by_rule
 
     def classify_keywords(self, title: str | None) -> tuple[str | None, float]:
         """Fallback keywords sur titre de session."""
@@ -459,9 +527,29 @@ class Classifier:
 
         # 5. AUTO : resolveur generique base sur git (marche sans yaml).
         # On essaie cwd en priorite, puis le 1er path touche (plus fiable
-        # que paths_distribution car un seul hit de .git/ suffit).
-        for candidate in [cwd] + list(paths or []):
-            if not candidate:
+        # que paths_distribution car un seul hit de .git/ suffit). On
+        # ignore la racine generique du workspace (cf
+        # _is_workspace_root_placeholder) : elle n'apporte aucune info de
+        # projet et ecraserait le vrai signal avec une confiance elevee.
+        #
+        # Dedup + plafond a 20 candidats : sans cwd (skippe ci-dessus), on
+        # retombe sur `paths` qui peut contenir des centaines/milliers
+        # d'entrees (regex best-effort sur des commandes shell longues,
+        # cf `_extract_tool_paths_codex`). Un seul hit de .git/ suffit — pas
+        # besoin d'examiner toute la liste, et `p.exists()` peut bloquer
+        # longtemps sur un volume reseau/externe demonte (ex. montage
+        # `/Volumes/...` absent) si on lui laisse des milliers de candidats.
+        seen: set[str] = set()
+        candidates: list[str] = []
+        for c in [cwd] + list(paths or []):
+            if not c or c in seen:
+                continue
+            seen.add(c)
+            candidates.append(c)
+            if len(candidates) >= 20:
+                break
+        for candidate in candidates:
+            if not candidate or _is_workspace_root_placeholder(candidate):
                 continue
             uid, _, auto_conf = resolve_repo_uid(candidate)
             if uid:
