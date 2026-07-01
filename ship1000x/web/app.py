@@ -212,7 +212,7 @@ def _compute_cost_truth(conn, days: int) -> dict[str, Any]:
         """SELECT source, cost_estimated, raw_meta
            FROM events
            WHERE date(started_at) >= date('now', ? || ' days')""",
-        (f"-{days}",),
+        (f"-{days - 1}",),
     ).fetchall()
 
     api_equivalent = 0.0
@@ -327,27 +327,27 @@ def create_app(db_path: Path, config_dir: Path) -> Flask:
                 "SELECT SUM(active_sec_unified) AS u, SUM(wall_clock_sec) AS w, "
                 "SUM(agent_sec_additive) AS aa, AVG(threshold_used_sec) AS thr "
                 "FROM daily_unified WHERE date >= date('now', ? || ' days')",
-                (f"-{days}",),
+                (f"-{days - 1}",),
             ).fetchone()
             lines_real = conn.execute(
                 "SELECT SUM(CAST(COALESCE(json_extract(raw_meta, '$.lines_real_added'), 0) AS INTEGER)) AS l "
                 "FROM events WHERE source = 'git' AND date(started_at) >= date('now', ? || ' days')",
-                (f"-{days}",),
+                (f"-{days - 1}",),
             ).fetchone()["l"] or 0
             lines_raw = conn.execute(
                 "SELECT SUM(CAST(COALESCE(json_extract(raw_meta, '$.lines_added'), 0) AS INTEGER)) AS l "
                 "FROM events WHERE source = 'git' AND date(started_at) >= date('now', ? || ' days')",
-                (f"-{days}",),
+                (f"-{days - 1}",),
             ).fetchone()["l"] or 0
             sources_count = conn.execute(
                 "SELECT COUNT(DISTINCT source) AS n FROM events "
                 "WHERE date(started_at) >= date('now', ? || ' days')",
-                (f"-{days}",),
+                (f"-{days - 1}",),
             ).fetchone()["n"] or 0
             active_days = conn.execute(
-                "SELECT COUNT(*) AS n FROM daily_unified "
+                "SELECT COUNT(DISTINCT date) AS n FROM daily_unified "
                 "WHERE date >= date('now', ? || ' days') AND active_sec_unified > 0",
-                (f"-{days}",),
+                (f"-{days - 1}",),
             ).fetchone()["n"] or 0
             cost_truth = _compute_cost_truth(conn, days)
             # Tokens FACTUELS — somme du superset usage_breakdown (capture
@@ -358,7 +358,7 @@ def create_app(db_path: Path, config_dir: Path) -> Flask:
                     f"json_extract(raw_meta, '$.usage_breakdown.{field}'), 0) AS INTEGER)) AS s "
                     "FROM events WHERE source != 'git' "
                     "AND date(started_at) >= date('now', ? || ' days')",
-                    (f"-{days}",),
+                    (f"-{days - 1}",),
                 ).fetchone()["s"] or 0
             tok = {f: _sum_ub(f) for f in (
                 "fresh_input", "cache_read", "cache_write_5m", "cache_write_1h",
@@ -420,28 +420,42 @@ def create_app(db_path: Path, config_dir: Path) -> Flask:
 
     @app.route("/api/trend")
     def api_trend():
+        from datetime import date as _date, timedelta as _td
         days = int(request.args.get("days", 30))
         with storage.conn() as conn:
+            # Agrege par date (somme sur toutes les machines) -> jamais de doublon
+            # de jour (avant : 2 lignes pour une meme date = 2 ticks identiques).
             rows = conn.execute(
                 """SELECT date,
-                          active_sec_unified AS active_sec,
-                          agent_sec_additive,
-                          wall_clock_sec
+                          SUM(active_sec_unified) AS active_sec,
+                          SUM(agent_sec_additive) AS agent_sec_additive,
+                          SUM(wall_clock_sec)     AS wall_clock_sec
                    FROM daily_unified
                    WHERE date >= date('now', ? || ' days')
-                   ORDER BY date""",
-                (f"-{days}",),
+                   GROUP BY date""",
+                (f"-{days - 1}",),
             ).fetchall()
-        return jsonify([
-            {
+            # Bornes calendaires via la meme horloge SQLite que la requete.
+            # -(days-1) .. aujourd'hui = EXACTEMENT `days` jours (7 -> 7, pas 8).
+            start_s, end_s = conn.execute(
+                "SELECT date('now', ? || ' days'), date('now')", (f"-{days - 1}",)
+            ).fetchone()
+        by_date = {r["date"]: r for r in rows}
+        # Un point par jour CALENDAIRE (jours sans activite = 0). Resultat : serie
+        # contigue -> "1 tick = 1 jour" et axe X regulier sur toutes les periodes.
+        out = []
+        cur, end = _date.fromisoformat(start_s), _date.fromisoformat(end_s)
+        while cur <= end:
+            r = by_date.get(cur.isoformat())
+            out.append({
                 "schema_version": "ship1000x.dashboard.trend_point.v1",
-                "date": r["date"],
-                "active_hours": round((r["active_sec"] or 0) / 3600, 2),
-                "agent_hours_additive": round((r["agent_sec_additive"] or 0) / 3600, 2),
-                "wall_hours": round((r["wall_clock_sec"] or 0) / 3600, 2),
-            }
-            for r in rows
-        ])
+                "date": cur.isoformat(),
+                "active_hours": round((r["active_sec"] or 0) / 3600, 2) if r else 0.0,
+                "agent_hours_additive": round((r["agent_sec_additive"] or 0) / 3600, 2) if r else 0.0,
+                "wall_hours": round((r["wall_clock_sec"] or 0) / 3600, 2) if r else 0.0,
+            })
+            cur += _td(days=1)
+        return jsonify(out)
 
     @app.route("/api/work-mix")
     def api_work_mix():
@@ -467,7 +481,7 @@ def create_app(db_path: Path, config_dir: Path) -> Flask:
                    WHERE source = 'git' AND started_at IS NOT NULL
                      AND date(started_at) >= date('now', ? || ' days')
                    GROUP BY day, project""",
-                (f"-{days}",),
+                (f"-{days - 1}",),
             ).fetchall()
 
         global_mix = {c: 0 for c in classes}
@@ -545,7 +559,7 @@ def create_app(db_path: Path, config_dir: Path) -> Flask:
                    WHERE source NOT IN ('git', 'git_secret_alert')
                      AND started_at IS NOT NULL
                      AND date(started_at) >= date('now', ? || ' days')""",
-                (f"-{days}",),
+                (f"-{days - 1}",),
             ).fetchall()
         for r in rows:
             meta = safe_raw_meta(r["raw_meta"])
@@ -608,7 +622,7 @@ def create_app(db_path: Path, config_dir: Path) -> Flask:
                    FROM events
                    WHERE source != 'git' AND started_at IS NOT NULL
                      AND date(started_at) >= date('now', ? || ' days')""",
-                (f"-{days}",),
+                (f"-{days - 1}",),
             ).fetchall()
 
         by_model: dict[tuple, dict] = {}
@@ -744,7 +758,7 @@ def create_app(db_path: Path, config_dir: Path) -> Flask:
                    FROM events
                    WHERE date(started_at) >= date('now', ? || ' days')
                    ORDER BY project, source""",
-                (f"-{days}",),
+                (f"-{days - 1}",),
             ).fetchall()
 
         # Aggregate by project
@@ -913,7 +927,7 @@ def create_app(db_path: Path, config_dir: Path) -> Flask:
                      AND started_at IS NOT NULL
                      AND date(started_at) >= date('now', ? || ' days')
                    ORDER BY started_at DESC""",
-                (f"-{days}",),
+                (f"-{days - 1}",),
             ).fetchall()
 
         events: list[dict] = []
